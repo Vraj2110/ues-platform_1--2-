@@ -1,0 +1,144 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url("https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap");
+
+:root {
+  --font-syne: "Syne", sans-serif;
+  --font-dm-sans: "DM Sans", sans-serif;
+
+  /* Brand Colors */
+  --color-mint: #f7fff7;
+  --color-pink: #ff6b6b;
+  --color-cyan: #4ecdc4;
+  --color-teal: #1a535c;
+  --color-teal-dark: #0f3238;
+  --color-teal-mid: #2a7a85;
+
+  /* Sidebar */
+  --sidebar-width: 240px;
+
+  /* Transitions */
+  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-dm-sans);
+  background-color: var(--color-teal-dark);
+  color: var(--color-mint);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(78, 205, 196, 0.2);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(78, 205, 196, 0.4);
+}
+
+/* Focus ring */
+*:focus-visible {
+  outline: 2px solid var(--color-cyan);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Selection */
+::selection {
+  background: rgba(78, 205, 196, 0.25);
+  color: var(--color-mint);
+}
+
+@layer components {
+  /* ─── Recharts Overrides ─── */
+  .recharts-cartesian-grid-horizontal line,
+  .recharts-cartesian-grid-vertical line {
+    stroke: rgba(78, 205, 196, 0.08);
+  }
+
+  .recharts-tooltip-wrapper .recharts-default-tooltip {
+    background: rgba(15, 50, 56, 0.95) !important;
+    border: 1px solid rgba(78, 205, 196, 0.25) !important;
+    border-radius: 10px !important;
+    backdrop-filter: blur(12px) !important;
+  }
+
+  .recharts-tooltip-label {
+    color: rgba(247, 255, 247, 0.7) !important;
+    font-family: var(--font-dm-sans) !important;
+    font-size: 0.75rem !important;
+  }
+
+  .recharts-tooltip-item {
+    color: #4ecdc4 !important;
+    font-family: var(--font-syne) !important;
+    font-weight: 700 !important;
+  }
+
+  .recharts-legend-item-text {
+    color: rgba(247, 255, 247, 0.6) !important;
+    font-family: var(--font-dm-sans) !important;
+    font-size: 0.75rem !important;
+  }
+
+  .recharts-text {
+    fill: rgba(247, 255, 247, 0.4) !important;
+    font-family: var(--font-dm-sans) !important;
+    font-size: 0.7rem !important;
+  }
+
+  /* ─── Custom input styles ─── */
+  .ues-input {
+    @apply w-full bg-teal-surface border border-cyan-border rounded-xl px-4 py-3 text-[var(--color-mint)] font-body text-sm outline-none transition-all duration-200 placeholder:text-mint-300;
+  }
+  .ues-input:focus {
+    @apply border-cyan-ues shadow-[0_0_0_3px_rgba(78,205,196,0.1)];
+  }
+
+  .ues-select {
+    @apply ues-input appearance-none cursor-pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='rgba(78,205,196,0.6)' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+    padding-right: 36px;
+  }
+
+  .ues-select option {
+    background: #0f3238;
+    color: #f7fff7;
+  }
+
+  /* ─── Card base ─── */
+  .ues-card {
+    @apply bg-teal-card border border-cyan-border/[0.12] rounded-2xl p-6;
+  }
+
+  /* ─── Section label ─── */
+  .section-label {
+    @apply text-xs font-semibold uppercase tracking-widest text-cyan-ues mb-4;
+  }
+
+  /* ─── Page animation ─── */
+  .page-enter {
+    animation: slide-up 0.35s var(--ease-smooth) forwards;
+  }
+}
