@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { signOut } from "firebase/auth";
 import { cn } from "@/lib/utils";
 import { auth } from "@/lib/firebase";
 
@@ -64,6 +65,7 @@ function NavSection({ label, items }: { label: string; items: NavItem[] }) {
 
 export function Sidebar() {
   const [user, setUser] = useState<any>(null);
+  const router = useRouter();
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((u) => {
@@ -72,11 +74,20 @@ export function Sidebar() {
     return unsubscribe;
   }, []);
 
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      router.push("/");
+    } catch (err) {
+      console.error("Logout failed", err);
+    }
+  };
+
   const profileName = user?.displayName || user?.email?.split("@")[0] || "User";
   const profileInitials = profileName
     .split(" ")
     .filter(Boolean)
-    .map((part) => part[0])
+    .map((part: string) => part[0])
     .join("")
     .slice(0, 2)
     .toUpperCase();
@@ -109,13 +120,14 @@ export function Sidebar() {
           <span className="w-5 text-center">👤</span>
           Profile
         </Link>
-        <Link
-          href="/"
-          className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium text-pink-ues/70 hover:bg-pink-light hover:text-pink-ues transition-all duration-200 no-underline mb-3"
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="flex w-full items-center gap-2.5 px-3 py-2.5 rounded-xl text-left text-sm font-medium text-pink-ues/70 hover:bg-pink-light hover:text-pink-ues transition-all duration-200 mb-3"
         >
           <span className="w-5 text-center">🚪</span>
           Logout
-        </Link>
+        </button>
 
         {/* User pill */}
         <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-teal-card/60 cursor-pointer hover:bg-teal-card transition-colors duration-200">

@@ -17,14 +17,19 @@ async function verifyToken(request: Request) {
 }
 
 export async function GET(request: Request) {
-  const decoded = await verifyToken(request);
-  if (!decoded?.uid) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  try {
+    const decoded = await verifyToken(request);
+    if (!decoded?.uid) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-  const connections = await getUserConnections(decoded.uid);
-  const list = Object.keys(connections).map((k) => ({ platformId: k, ...connections[k] }));
-  return NextResponse.json(list);
+    const connections = await getUserConnections(decoded.uid);
+    const list = Object.keys(connections).map((k) => ({ ...(connections[k] as any), platformId: k }));
+    return NextResponse.json(list);
+  } catch (err) {
+    console.error("Failed to load user connections", err);
+    return NextResponse.json({ error: "Server error while loading connections" }, { status: 500 });
+  }
 }
 
 export async function POST(request: Request) {

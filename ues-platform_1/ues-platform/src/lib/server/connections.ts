@@ -10,9 +10,10 @@ const userConnectionSecretsDoc = (uid: string, platformId: string) =>
 export async function getUserConnections(uid: string): Promise<Record<string, PlatformConnection>> {
   const snapshot = await adminDb.collection("users").doc(uid).collection("platformConnections").get();
   const result: Record<string, PlatformConnection> = {};
-  snapshot.docs.forEach((doc) => {
+  snapshot.docs.forEach((doc: any) => {
     result[doc.id] = doc.data() as PlatformConnection;
   });
+  
   return result;
 }
 

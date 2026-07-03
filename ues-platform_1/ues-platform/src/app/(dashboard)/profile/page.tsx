@@ -8,6 +8,9 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { UES_SCORE, POSTS, CONNECTED_PLATFORMS } from "@/lib/data";
 import { auth } from "@/lib/firebase";
+import { db } from "@/lib/firestore";
+import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
+import { updateProfile } from "firebase/auth";
 
 // Removed metadata export because it's not allowed in a 'use client' component
 
@@ -26,15 +29,41 @@ export default function ProfilePage() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((u) => {
       setUser(u);
-      const nameParts = (u?.displayName || "").split(" ");
-      setFirstName(nameParts[0] || "");
-      setLastName(nameParts.slice(1).join(" ") || "");
-      setEditing(!u?.displayName);
+      (async () => {
+        if (!u) {
+          setFirstName("");
+          setLastName("");
+          setEditing(false);
+          return;
+        }
+        try {
+          const userDoc = await getDoc(doc(db, "users", u.uid));
+          const storedName = userDoc.exists() ? (userDoc.data() as any).displayName || (userDoc.data() as any).name : null;
+          const resolvedName = storedName || u.displayName || "";
+          if (resolvedName && u.displayName !== resolvedName) {
+            try {
+              await updateProfile(u, { displayName: resolvedName });
+            } catch (e) {
+              // ignore updateProfile failures here
+            }
+          }
+          const nameParts = (resolvedName || "").split(" ");
+          setFirstName(nameParts[0] || "");
+          setLastName(nameParts.slice(1).join(" ") || "");
+          setEditing(!resolvedName);
+        } catch (e) {
+          const nameParts = (u?.displayName || "").split(" ");
+          setFirstName(nameParts[0] || "");
+          setLastName(nameParts.slice(1).join(" ") || "");
+          setEditing(!u?.displayName);
+        }
+      })();
     });
     return () => unsubscribe();
   }, []);
@@ -58,14 +87,37 @@ export default function ProfilePage() {
     setSaving(true);
     setError("");
     try {
-      await user.updateProfile({ displayName: fullName });
-      const updatedUser = auth.currentUser || user;
+      const current = auth.currentUser;
+      if (!current) throw new Error("No authenticated user");
+      await updateProfile(current, { displayName: fullName });
+      // refresh user reference
+      const updatedUser = auth.currentUser;
       setUser(updatedUser);
       setEditing(false);
+      // persist to firestore
+      try {
+        await setDoc(doc(db, "users", current.uid), {
+          displayName: fullName,
+          email: current.email || null,
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+      } catch (writeErr) {
+        console.warn("Failed to persist profile to Firestore", writeErr);
+      }
+      // show saved state and reload so user sees updated info
+      setSaved(true);
+      setSaving(false);
+      setTimeout(() => {
+        try {
+          window.location.reload();
+        } catch (e) {
+          // ignore
+        }
+      }, 700);
     } catch (e: any) {
       setError(e.message || "Failed to update name.");
     } finally {
-      setSaving(false);
+      if (!saved) setSaving(false);
     }
   };
 
@@ -84,57 +136,7 @@ export default function ProfilePage() {
             <div className="w-[88px] h-[88px] rounded-full bg-gradient-to-br from-cyan-ues to-teal-DEFAULT flex items-center justify-center font-display font-extrabold text-3xl text-teal-dark mx-auto mb-4 border-[3px] border-cyan-border/30">
               {avatarInitials}
             </div>
-            <h2 className="font-display font-bold text-xl">
-              {editing ? (
-                <div className="space-y-3">
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="First Name"
-                      value={firstName}
-                      onChange={e => setFirstName(e.target.value)}
-                      className="flex-1"
-                    />
-                    <Input
-                      placeholder="Last Name"
-                      value={lastName}
-                      onChange={e => setLastName(e.target.value)}
-                      className="flex-1"
-                    />
-                  </div>
-                  <div className="flex gap-2 justify-center">
-                    <Button
-                      size="sm"
-                      variant="primary"
-                      disabled={saving}
-                      onClick={handleSaveName}
-                    >
-                      {saving ? "Saving..." : "Save"}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => { setEditing(false); const nameParts = displayName.split(" "); setFirstName(nameParts[0] || ""); setLastName(nameParts.slice(1).join(" ") || ""); setError(""); }}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  {displayName}
-                  {user && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="ml-2"
-                      onClick={() => setEditing(true)}
-                    >
-                      Change Username
-                    </Button>
-                  )}
-                </>
-              )}
-            </h2>
+            <h2 className="font-display font-bold text-xl">{displayName}</h2>
             {error && <div className="text-xs text-pink-ues mt-1">{error}</div>}
             <p className="text-sm text-mint-700 mt-1">{email}</p>
             <div className="inline-flex items-center gap-1.5 mt-3 bg-pink-light text-pink-ues text-xs font-semibold px-3 py-1.5 rounded-full">
@@ -222,8 +224,8 @@ export default function ProfilePage() {
                 </select>
               </div>
               <div className="flex gap-3 pt-1">
-                <Button variant="primary" type="submit" disabled={saving}>
-                  {saving ? "Saving..." : "Save Changes"}
+                <Button variant="primary" type="submit" disabled={saving || saved}>
+                  {saving ? "Saving..." : saved ? "Saved" : "Save Changes"}
                 </Button>
                 <Button variant="ghost" type="button">
                   Change Password

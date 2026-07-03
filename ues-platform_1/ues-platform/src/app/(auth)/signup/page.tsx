@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { auth } from "@/lib/firebase";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { db } from "@/lib/firestore";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -44,6 +46,17 @@ export default function SignupPage() {
       const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
       if (userCredential.user && fullName) {
         await updateProfile(userCredential.user, { displayName: fullName });
+        try {
+          await setDoc(doc(db, "users", userCredential.user.uid), {
+            displayName: fullName,
+            email,
+            organization: org || null,
+            createdAt: serverTimestamp(),
+          });
+        } catch (writeErr) {
+          // non-fatal
+          console.warn("Failed to write user profile to Firestore", writeErr);
+        }
       }
       router.push("/dashboard");
     } catch (err: any) {
