@@ -1,13 +1,14 @@
 import { cn } from "@/lib/utils";
-import { InputHTMLAttributes, TextareaHTMLAttributes, forwardRef } from "react";
+import { InputHTMLAttributes, ReactNode, TextareaHTMLAttributes, forwardRef } from "react";
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
+  rightAdornment?: ReactNode;
 }
 
 const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ label, error, className, ...props }, ref) => {
+  ({ label, error, className, rightAdornment, ...props }, ref) => {
     return (
       <div className="flex flex-col gap-1.5">
         {label && (
@@ -15,11 +16,18 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
             {label}
           </label>
         )}
-        <input
-          ref={ref}
-          className={cn("ues-input", error && "border-pink-ues", className)}
-          {...props}
-        />
+        <div className="relative">
+          <input
+            ref={ref}
+            className={cn("ues-input", error && "border-pink-ues", className)}
+            {...props}
+          />
+          {rightAdornment && (
+            <div className="absolute inset-y-0 right-4 flex items-center justify-center">
+              {rightAdornment}
+            </div>
+          )}
+        </div>
         {error && (
           <p className="text-xs text-pink-ues mt-0.5">{error}</p>
         )}

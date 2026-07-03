@@ -4,6 +4,8 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { ConnectedBadge } from "@/components/ui/Badge";
 import { PLATFORMS } from "@/lib/data";
+import { useEffect, useState } from "react";
+import { auth } from "@/lib/firebase";
 
 export const metadata: Metadata = { title: "Connect Platform" };
 
@@ -17,6 +19,56 @@ const PLATFORM_DESC: Record<string, string> = {
 };
 
 export default function ConnectPage() {
+  const [connections, setConnections] = useState<Record<string, any>>({});
+
+  useEffect(() => {
+    let mounted = true;
+    async function load() {
+      try {
+        const user = auth.currentUser;
+        const headers: Record<string, string> = {};
+        if (user) {
+          const token = await user.getIdToken();
+          headers['authorization'] = `Bearer ${token}`;
+        }
+        const res = await fetch('/api/connections', { headers });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!mounted) return;
+        const map: Record<string, any> = {};
+        data.forEach((c: any) => (map[c.platformId] = c));
+        setConnections(map);
+      } catch (e) {
+        // ignore errors
+      }
+    }
+    load();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  async function handleDisconnect(platformId: string) {
+    try {
+      const user = auth.currentUser;
+      if (!user) return;
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/connections/${platformId}/disconnect`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        setConnections((prev) => {
+          const copy = { ...prev };
+          delete copy[platformId];
+          return copy;
+        });
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
   return (
     <div className="page-enter">
       <PageHeader
@@ -25,25 +77,33 @@ export default function ConnectPage() {
       />
       <div className="px-9 pb-9">
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-          {PLATFORMS.map((platform) => (
-            <Card
-              key={platform.id}
-              className={platform.connected ? "border-cyan-border/35 bg-cyan-light/[0.04]" : ""}
-            >
-              <div className="text-4xl mb-3">{platform.icon}</div>
-              <h3 className="font-display font-bold text-base mb-2">{platform.name}</h3>
-              <p className="text-sm text-mint-700 mb-5 leading-relaxed min-h-[44px]">
-                {PLATFORM_DESC[platform.id]}
-              </p>
-              {platform.connected ? (
-                <ConnectedBadge />
-              ) : (
-                <Button variant="outline" size="sm" className="w-full">
-                  Connect →
-                </Button>
-              )}
-            </Card>
-          ))}
+          {PLATFORMS.map((platform) => {
+            const connected = !!connections[platform.id] || platform.connected;
+            return (
+              <Card
+                key={platform.id}
+                className={connected ? "border-cyan-border/35 bg-cyan-light/[0.04]" : ""}
+              >
+                <div className="text-4xl mb-3">{platform.icon}</div>
+                <h3 className="font-display font-bold text-base mb-2">{platform.name}</h3>
+                <p className="text-sm text-mint-700 mb-5 leading-relaxed min-h-[44px]">
+                  {PLATFORM_DESC[platform.id]}
+                </p>
+                {connected ? (
+                  <div className="flex items-center justify-between">
+                    <ConnectedBadge />
+                    <button onClick={() => handleDisconnect(platform.id)} className="btn btn-ghost">
+                      Disconnect
+                    </button>
+                  </div>
+                ) : (
+                  <a className="btn w-full" href={`/api/connections/${platform.id}/start`}>
+                    Connect →
+                  </a>
+                )}
+              </Card>
+            );
+          })}
         </div>
 
         {/* Info card */}

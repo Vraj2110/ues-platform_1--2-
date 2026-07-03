@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { auth } from "@/lib/firebase";
 
 interface NavItem {
   href: string;
@@ -61,6 +63,24 @@ function NavSection({ label, items }: { label: string; items: NavItem[] }) {
 }
 
 export function Sidebar() {
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged((u) => {
+      setUser(u);
+    });
+    return unsubscribe;
+  }, []);
+
+  const profileName = user?.displayName || user?.email?.split("@")[0] || "User";
+  const profileInitials = profileName
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
   return (
     <aside className="fixed top-0 left-0 bottom-0 w-[240px] z-50 flex flex-col bg-teal-deep border-r border-cyan-border/10 overflow-y-auto">
       {/* Logo */}
@@ -100,10 +120,10 @@ export function Sidebar() {
         {/* User pill */}
         <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-teal-card/60 cursor-pointer hover:bg-teal-card transition-colors duration-200">
           <div className="w-9 h-9 rounded-full bg-gradient-to-br from-cyan-ues to-teal-DEFAULT flex items-center justify-center font-display font-bold text-sm text-teal-dark flex-shrink-0">
-            AK
+            {profileInitials}
           </div>
           <div>
-            <p className="text-sm font-semibold text-[var(--color-mint)] leading-tight">Aditya K.</p>
+            <p className="text-sm font-semibold text-[var(--color-mint)] leading-tight">{profileName}</p>
             <p className="text-[11px] text-mint-700">Pro Plan</p>
           </div>
         </div>

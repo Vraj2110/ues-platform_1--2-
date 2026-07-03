@@ -31,9 +31,10 @@ export default function ProfilePage() {
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((u) => {
       setUser(u);
-      const nameParts = (u?.displayName || u?.email?.split("@")[0] || "").split(" ");
+      const nameParts = (u?.displayName || "").split(" ");
       setFirstName(nameParts[0] || "");
       setLastName(nameParts.slice(1).join(" ") || "");
+      setEditing(!u?.displayName);
     });
     return () => unsubscribe();
   }, []);
@@ -49,7 +50,7 @@ export default function ProfilePage() {
 
   const handleSaveName = async () => {
     if (!user) return;
-    const fullName = `${firstName} ${lastName}`.trim();
+    const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
     if (!fullName) {
       setError("Name cannot be empty.");
       return;
@@ -58,6 +59,8 @@ export default function ProfilePage() {
     setError("");
     try {
       await user.updateProfile({ displayName: fullName });
+      const updatedUser = auth.currentUser || user;
+      setUser(updatedUser);
       setEditing(false);
     } catch (e: any) {
       setError(e.message || "Failed to update name.");
@@ -192,13 +195,23 @@ export default function ProfilePage() {
           <Card>
             <CardTitle>Account Settings</CardTitle>
             <CardSubtitle>Update your personal information</CardSubtitle>
-            <form className="mt-6 space-y-4">
+            <form className="mt-6 space-y-4" onSubmit={(e) => { e.preventDefault(); handleSaveName(); }}>
               <div className="grid grid-cols-2 gap-4">
-                <Input label="First Name" defaultValue="Aditya" type="text" />
-                <Input label="Last Name" defaultValue="Kumar" type="text" />
+                <Input
+                  label="First Name"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  type="text"
+                />
+                <Input
+                  label="Last Name"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  type="text"
+                />
               </div>
-              <Input label="Email address" defaultValue="aditya@example.com" type="email" />
-              <Input label="Organization" defaultValue="UES Research Lab" type="text" />
+              <Input label="Email address" value={email} type="email" readOnly />
+              <Input label="Organization" placeholder="UES Research Lab" type="text" />
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-medium text-mint-700">Timezone</label>
                 <select className="ues-select">
@@ -209,8 +222,12 @@ export default function ProfilePage() {
                 </select>
               </div>
               <div className="flex gap-3 pt-1">
-                <Button variant="primary">Save Changes</Button>
-                <Button variant="ghost">Change Password</Button>
+                <Button variant="primary" type="submit" disabled={saving}>
+                  {saving ? "Saving..." : "Save Changes"}
+                </Button>
+                <Button variant="ghost" type="button">
+                  Change Password
+                </Button>
               </div>
             </form>
           </Card>

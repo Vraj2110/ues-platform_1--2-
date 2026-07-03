@@ -121,7 +121,37 @@ export interface User {
   plan: "free" | "pro" | "enterprise";
   avatarInitials: string;
 }
+export interface PlatformConnection {
+  platformId: PlatformId;
+  connected: boolean;
+  accountName?: string;
+  accountId?: string;
+  provider?: string;
+  lastSync?: string;
+  lastError?: string;
+}
 
+export interface PlatformAnalytics {
+  platformId: PlatformId;
+  connected: boolean;
+  followers?: number;
+  reach?: number;
+  engagement?: number;
+  likes?: number;
+  comments?: number;
+  views?: number;
+  lastUpdated?: string;
+  topPosts?: Array<{
+    id: string;
+    title: string;
+    thumbnailUrl?: string;
+    publishedAt?: string;
+    views?: number;
+    likes?: number;
+    comments?: number;
+    engagementRate?: number;
+  }>;
+}
 // ─── Dashboard Stat Types ──────────────────────────────────────────────────
 
 export interface DashboardStat {

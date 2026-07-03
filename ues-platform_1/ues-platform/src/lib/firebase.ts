@@ -2,7 +2,7 @@
 import { initializeApp, getApps } from "firebase/app";
 import { getAuth, GoogleAuthProvider, GithubAuthProvider } from "firebase/auth";
 
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: "AIzaSyAHQsD5ZGhaeSiqogaXXvvDAhU0bPQBTWw",
   authDomain: "ues-platform.firebaseapp.com",
   projectId: "ues-platform",
