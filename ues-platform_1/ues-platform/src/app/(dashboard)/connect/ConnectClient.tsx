@@ -13,31 +13,21 @@ export default function ConnectClient({ platforms }: { platforms: Platform[] }) 
   const [user, setUser] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingPlatform, setLoadingPlatform] = useState<Record<string, boolean>>({});
+  const [pendingConnected, setPendingConnected] = useState(false);
   const [loadingConnections, setLoadingConnections] = useState(false);
   const [hasLoadedConnections, setHasLoadedConnections] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  useEffect(() => {
-    let mounted = true;
-    const unsub = auth.onAuthStateChanged(async (u) => {
-      setUser(u);
-      if (u) {
-        await loadConnections(u);
-      } else {
-        setConnections({});
-      }
-    });
-
-    async function loadConnections(u: any) {
-      setError(null);
+  const loadConnections = React.useCallback(
+    async (u: any) => {
       if (!u) return;
+      setError(null);
       setLoadingConnections(true);
 
       const tryFetch = async (useFreshToken = false) => {
         const token = await u.getIdToken(useFreshToken);
-        const res = await fetch("/api/connections", { headers: { authorization: `Bearer ${token}` } });
-        return res;
+        return fetch("/api/connections", { headers: { authorization: `Bearer ${token}` } });
       };
 
       try {
@@ -56,8 +46,6 @@ export default function ConnectClient({ platforms }: { platforms: Platform[] }) 
         }
 
         const data = await res.json();
-        if (!mounted) return;
-
         const map: Record<string, any> = {};
         data.forEach((c: any) => (map[c.platformId] = c));
         setConnections(map);
@@ -66,19 +54,35 @@ export default function ConnectClient({ platforms }: { platforms: Platform[] }) 
         console.error("Connection fetch error", e);
         setError("Unable to load your connected platforms. Please try again.");
       } finally {
-        if (mounted) {
-          setLoadingConnections(false);
-        }
+        setLoadingConnections(false);
       }
-    }
+    },
+    [router]
+  );
+
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged((u) => {
+      setUser(u);
+      if (u) {
+        loadConnections(u);
+      } else {
+        setConnections({});
+      }
+    });
 
     loadConnections(auth.currentUser);
+    return () => unsubscribe();
+  }, [loadConnections]);
 
-    return () => {
-      mounted = false;
-      unsub();
-    };
-  }, [router, searchParams]);
+  useEffect(() => {
+    if (searchParams.get("success") === "connected") {
+      setPendingConnected(true);
+      setError(null);
+      if (user) {
+        loadConnections(user);
+      }
+    }
+  }, [searchParams, user, loadConnections]);
 
   async function handleStart(platformId: string) {
     if (!user) {
@@ -150,16 +154,30 @@ export default function ConnectClient({ platforms }: { platforms: Platform[] }) 
     facebook: "Reactions, comments, shares, reach, and page engagement.",
   };
 
+  const successConnected = searchParams.get("success") === "connected";
+  const oauthError = searchParams.get("error");
+  const oauthErrorReason = searchParams.get("reason");
+  const showErrorMessage = oauthError
+    ? `${oauthError.replace(/_/g, " ")}${oauthErrorReason ? `: ${decodeURIComponent(oauthErrorReason)}` : ""}`
+    : error;
+
   return (
     <>
-      {error && hasLoadedConnections ? (
+      {successConnected ? (
+        <div className="p-4 mb-5 rounded-2xl bg-cyan-light border border-cyan-border/20 text-sm text-cyan-ues">
+          YouTube access was granted successfully. Your connection is now active.
+        </div>
+      ) : null}
+      {showErrorMessage && hasLoadedConnections && !pendingConnected ? (
         <div className="p-4 mb-5 rounded-2xl bg-pink-light border border-pink-ues/20 text-sm text-pink-ues">
-          {error}
+          {showErrorMessage}
         </div>
       ) : null}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
         {platforms.map((platform) => {
-          const connected = !!connections[platform.id]?.connected;
+          const connected =
+            !!connections[platform.id]?.connected ||
+            (successConnected && platform.id === "youtube");
           const isLoading = !!loadingPlatform[platform.id];
           return (
             <Card

@@ -185,6 +185,7 @@ export async function fetchYouTubeChannelId(accessToken: string) {
 export async function fetchYouTubeAnalyticsReport(accessToken: string, refreshToken?: string) {
   const { startDate, endDate } = getLast30DaysRange();
   const url = new URL(YOUTUBE_ANALYTICS_URL);
+  url.searchParams.set("ids", "channel==MINE");
   url.searchParams.set("dimensions", "day");
   url.searchParams.set("metrics", "views,estimatedMinutesWatched,subscribersGained,likes");
   url.searchParams.set("startDate", startDate);

@@ -5,7 +5,10 @@ import { createOAuthState, getGoogleOAuthUrl, getInstagramOAuthUrl } from "@/lib
 export async function POST(request: Request, { params }: { params: { platformId: string } }) {
   try {
     const decoded = await verifyIdToken(request);
-    if (!decoded?.uid) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!decoded?.uid) {
+      console.error("OAuth start failed: missing or invalid auth token");
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     const uid = (decoded as any).uid as string;
     const { platformId } = params;
     const state = await createOAuthState(uid, platformId);

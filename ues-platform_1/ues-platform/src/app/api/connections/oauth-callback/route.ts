@@ -53,7 +53,7 @@ export async function GET(request: Request) {
   const error = params.get("error");
 
   if (!state || !code) {
-    return NextResponse.redirect(new URL("/connect", request.url));
+    return NextResponse.redirect(new URL(`/connect?error=missing_oauth_parameters`, request.url));
   }
   if (error) {
     return NextResponse.redirect(new URL(`/connect?error=${encodeURIComponent(error)}`, request.url));
@@ -61,7 +61,7 @@ export async function GET(request: Request) {
 
   const record = await resolveOAuthState(state);
   if (!record) {
-    return NextResponse.redirect(new URL("/connect?error=invalid_state", request.url));
+    return NextResponse.redirect(new URL(`/connect?error=invalid_state`, request.url));
   }
 
   const { uid, platform } = record;
@@ -70,10 +70,9 @@ export async function GET(request: Request) {
       const tokenResponse = await exchangeGoogleCode(code);
       const refreshToken = tokenResponse.refresh_token;
       const accessToken = tokenResponse.access_token;
-      const [profile, channelId, analytics] = await Promise.all([
+      const [profile, channelId] = await Promise.all([
         fetchYouTubeChannel(accessToken),
         fetchYouTubeChannelId(accessToken),
-        fetchYouTubeAnalyticsReport(accessToken, refreshToken),
       ]);
       const connection = normalizeConnection("youtube", profile);
       await setUserConnection(uid, "youtube", {
@@ -89,7 +88,12 @@ export async function GET(request: Request) {
         tokenType: tokenResponse.token_type,
         createdAt: new Date().toISOString(),
       });
-      await setUserYoutubeAnalytics(uid, analytics);
+      try {
+        const analytics = await fetchYouTubeAnalyticsReport(accessToken, refreshToken);
+        await setUserYoutubeAnalytics(uid, analytics);
+      } catch (analyticsError) {
+        console.warn("YouTube analytics fetch failed, saving connection without analytics:", analyticsError);
+      }
     } else if (platform === "instagram") {
       const tokenResponse = await exchangeInstagramCode(code);
       const accessToken = tokenResponse.access_token;
@@ -107,7 +111,10 @@ export async function GET(request: Request) {
     }
     return NextResponse.redirect(new URL("/connect?success=connected", request.url));
   } catch (err) {
-    console.error(err);
-    return NextResponse.redirect(new URL(`/connect?error=${encodeURIComponent("oauth_failed")}`, request.url));
+    console.error("OAuth callback failed:", err);
+    const reason = encodeURIComponent(String(err?.message || err || "unknown_error"));
+    return NextResponse.redirect(
+      new URL(`/connect?error=oauth_failed&reason=${reason}`, request.url)
+    );
   }
 }
