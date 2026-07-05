@@ -7,6 +7,9 @@ const userConnectionDoc = (uid: string, platformId: string) =>
 const userConnectionSecretsDoc = (uid: string, platformId: string) =>
   adminDb.collection("users").doc(uid).collection("platformConnectionSecrets").doc(platformId);
 
+const userYouTubeAnalyticsDoc = (uid: string) =>
+  adminDb.collection("users").doc(uid).collection("analytics").doc("youtube");
+
 export async function getUserConnections(uid: string): Promise<Record<string, PlatformConnection>> {
   const snapshot = await adminDb.collection("users").doc(uid).collection("platformConnections").get();
   const result: Record<string, PlatformConnection> = {};
@@ -36,6 +39,15 @@ export async function setUserConnectionSecrets(
   secrets: Record<string, unknown>
 ) {
   await userConnectionSecretsDoc(uid, platformId).set(secrets, { merge: true });
+}
+
+export async function setUserYoutubeAnalytics(uid: string, analytics: Record<string, unknown>) {
+  await userYouTubeAnalyticsDoc(uid).set(analytics, { merge: true });
+}
+
+export async function getUserYoutubeAnalytics(uid: string) {
+  const snapshot = await userYouTubeAnalyticsDoc(uid).get();
+  return snapshot.exists ? (snapshot.data() as Record<string, unknown>) : null;
 }
 
 export async function clearUserConnection(uid: string, platformId: string) {

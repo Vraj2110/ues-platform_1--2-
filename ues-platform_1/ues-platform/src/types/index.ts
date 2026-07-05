@@ -126,9 +126,11 @@ export interface PlatformConnection {
   connected: boolean;
   accountName?: string;
   accountId?: string;
+  channelId?: string;
   provider?: string;
   lastSync?: string;
   lastError?: string;
+  analytics?: Record<string, unknown>;
 }
 
 export interface PlatformAnalytics {

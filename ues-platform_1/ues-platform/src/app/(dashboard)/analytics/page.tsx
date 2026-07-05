@@ -8,6 +8,7 @@ import {
   ScoreBandChart,
   PlatformPieChart,
 } from "@/components/charts/Charts";
+import YouTubeAnalyticsDashboard from "@/components/dashboard/YouTubeAnalyticsDashboard";
 import { POSTS, PLATFORM_DISTRIBUTION } from "@/lib/data";
 
 export const metadata: Metadata = { title: "Analytics" };
@@ -53,6 +54,8 @@ export default function AnalyticsPage() {
             </button>
           ))}
         </div>
+
+        <YouTubeAnalyticsDashboard />
 
         {/* Top stats strip */}
         <div className="grid grid-cols-4 gap-4">

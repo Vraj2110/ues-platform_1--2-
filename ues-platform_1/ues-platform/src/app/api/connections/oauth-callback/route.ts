@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 import { resolveOAuthState } from "@/lib/server/oauth";
-import { exchangeGoogleCode, exchangeInstagramCode, fetchYouTubeChannel, fetchInstagramProfile } from "@/lib/server/oauth";
-import { setUserConnection, setUserConnectionSecrets } from "@/lib/server/connections";
+import {
+  exchangeGoogleCode,
+  exchangeInstagramCode,
+  fetchYouTubeChannel,
+  fetchYouTubeChannelId,
+  fetchYouTubeAnalyticsReport,
+  fetchInstagramProfile,
+} from "@/lib/server/oauth";
+import { setUserConnection, setUserConnectionSecrets, setUserYoutubeAnalytics } from "@/lib/server/connections";
 import type { PlatformConnection } from "@/types";
 
 function parseSearchParams(request: Request) {
@@ -63,9 +70,17 @@ export async function GET(request: Request) {
       const tokenResponse = await exchangeGoogleCode(code);
       const refreshToken = tokenResponse.refresh_token;
       const accessToken = tokenResponse.access_token;
-      const profile = await fetchYouTubeChannel(accessToken);
+      const [profile, channelId, analytics] = await Promise.all([
+        fetchYouTubeChannel(accessToken),
+        fetchYouTubeChannelId(accessToken),
+        fetchYouTubeAnalyticsReport(accessToken, refreshToken),
+      ]);
       const connection = normalizeConnection("youtube", profile);
-      await setUserConnection(uid, "youtube", connection);
+      await setUserConnection(uid, "youtube", {
+        ...connection,
+        accountId: channelId || connection.accountId,
+        channelId: channelId || undefined,
+      });
       await setUserConnectionSecrets(uid, "youtube", {
         accessToken,
         refreshToken,
@@ -74,6 +89,7 @@ export async function GET(request: Request) {
         tokenType: tokenResponse.token_type,
         createdAt: new Date().toISOString(),
       });
+      await setUserYoutubeAnalytics(uid, analytics);
     } else if (platform === "instagram") {
       const tokenResponse = await exchangeInstagramCode(code);
       const accessToken = tokenResponse.access_token;

@@ -1,8 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { ConnectedBadge } from "@/components/ui/Badge";
@@ -14,23 +13,39 @@ export default function ConnectClient({ platforms }: { platforms: Platform[] }) 
   const [user, setUser] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingPlatform, setLoadingPlatform] = useState<Record<string, boolean>>({});
+  const [loadingConnections, setLoadingConnections] = useState(false);
+  const [hasLoadedConnections, setHasLoadedConnections] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     let mounted = true;
-    const unsub = auth.onAuthStateChanged((u) => {
+    const unsub = auth.onAuthStateChanged(async (u) => {
       setUser(u);
       if (u) {
-        loadConnections(u);
+        await loadConnections(u);
       } else {
         setConnections({});
       }
     });
+
     async function loadConnections(u: any) {
       setError(null);
-      try {
-        const token = await u.getIdToken();
+      if (!u) return;
+      setLoadingConnections(true);
+
+      const tryFetch = async (useFreshToken = false) => {
+        const token = await u.getIdToken(useFreshToken);
         const res = await fetch("/api/connections", { headers: { authorization: `Bearer ${token}` } });
+        return res;
+      };
+
+      try {
+        let res = await tryFetch(true);
+        if (res.status === 401) {
+          res = await tryFetch(true);
+        }
+
         if (!res.ok) {
           if (res.status === 401) {
             router.push("/login");
@@ -39,20 +54,31 @@ export default function ConnectClient({ platforms }: { platforms: Platform[] }) 
           }
           return;
         }
+
         const data = await res.json();
         if (!mounted) return;
+
         const map: Record<string, any> = {};
         data.forEach((c: any) => (map[c.platformId] = c));
         setConnections(map);
+        setHasLoadedConnections(true);
       } catch (e) {
-        setError("Network error while loading connections.");
+        console.error("Connection fetch error", e);
+        setError("Unable to load your connected platforms. Please try again.");
+      } finally {
+        if (mounted) {
+          setLoadingConnections(false);
+        }
       }
     }
+
+    loadConnections(auth.currentUser);
+
     return () => {
       mounted = false;
       unsub();
     };
-  }, [router]);
+  }, [router, searchParams]);
 
   async function handleStart(platformId: string) {
     if (!user) {
@@ -126,43 +152,40 @@ export default function ConnectClient({ platforms }: { platforms: Platform[] }) 
 
   return (
     <>
-      {error ? (
+      {error && hasLoadedConnections ? (
         <div className="p-4 mb-5 rounded-2xl bg-pink-light border border-pink-ues/20 text-sm text-pink-ues">
           {error}
         </div>
       ) : null}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
         {platforms.map((platform) => {
-          const connected = !!connections[platform.id];
+          const connected = !!connections[platform.id]?.connected;
           const isLoading = !!loadingPlatform[platform.id];
           return (
             <Card
               key={platform.id}
               className={connected ? "border-cyan-border/35 bg-cyan-light/[0.04]" : ""}
             >
-            <div className="text-4xl mb-3">{platform.icon}</div>
-            <h3 className="font-display font-bold text-base mb-2">{platform.name}</h3>
-            <p className="text-sm text-mint-700 mb-5 leading-relaxed min-h-[44px]">{PLATFORM_DESC[platform.id]}</p>
-            {connected ? (
-              <div className="flex items-center justify-between">
-                <ConnectedBadge />
-                <button onClick={() => handleDisconnect(platform.id)} className="btn btn-ghost">
-                  Disconnect
+              <div className="text-4xl mb-3">{platform.icon}</div>
+              <h3 className="font-display font-bold text-base mb-2">{platform.name}</h3>
+              <p className="text-sm text-mint-700 mb-5 leading-relaxed min-h-[44px]">{PLATFORM_DESC[platform.id]}</p>
+              {connected ? (
+                <button disabled className="btn w-full bg-slate-300 text-slate-800 cursor-not-allowed">
+                  Connected
                 </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => handleStart(platform.id)}
-                className="btn w-full"
-                disabled={!user || isLoading}
-              >
-                {isLoading ? "Connecting..." : user ? "Connect →" : "Sign in to connect"}
-              </button>
-            )}
-          </Card>
-        );
-      })}
-    </div>
+              ) : (
+                <button
+                  onClick={() => handleStart(platform.id)}
+                  className="btn w-full"
+                  disabled={!user || isLoading}
+                >
+                  {isLoading ? "Connecting..." : user ? "Connect →" : "Sign in to connect"}
+                </button>
+              )}
+            </Card>
+          );
+        })}
+      </div>
     </>
   );
 }
