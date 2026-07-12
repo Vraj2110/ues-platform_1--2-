@@ -109,10 +109,10 @@ export async function GET(request: Request) {
         createdAt: new Date().toISOString(),
       });
     }
-    return NextResponse.redirect(new URL("/connect?success=connected", request.url));
+    return NextResponse.redirect(new URL(`/connect?success=connected&platform=${platform}`, request.url));
   } catch (err) {
     console.error("OAuth callback failed:", err);
-    const reason = encodeURIComponent(String(err?.message || err || "unknown_error"));
+    const reason = encodeURIComponent(String(err instanceof Error ? err.message : String(err) || "unknown_error"));
     return NextResponse.redirect(
       new URL(`/connect?error=oauth_failed&reason=${reason}`, request.url)
     );

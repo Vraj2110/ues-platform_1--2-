@@ -1,12 +1,13 @@
 "use client";
-import type { Metadata } from "next";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PostRow } from "@/components/dashboard/PostRow";
+import YouTubeVideoList from "@/components/dashboard/YouTubeVideoList";
 import { POSTS } from "@/lib/data";
+import { auth } from "@/lib/firebase";
 
 const PLATFORM_FILTERS = [
   { label: "All", value: "all" },
@@ -19,10 +20,55 @@ const PLATFORM_FILTERS = [
 
 export default function PostsPage() {
   const [selectedPlatform, setSelectedPlatform] = useState("all");
+  const [youtubeConnected, setYoutubeConnected] = useState(false);
+  const [checkingYoutubeConnection, setCheckingYoutubeConnection] = useState(true);
   const filteredPosts =
     selectedPlatform === "all"
       ? POSTS
       : POSTS.filter((post) => post.platform === selectedPlatform);
+
+  useEffect(() => {
+    let active = true;
+
+    const unsubscribe = auth.onAuthStateChanged(async (user) => {
+      if (!user) {
+        if (active) {
+          setYoutubeConnected(false);
+          setCheckingYoutubeConnection(false);
+        }
+        return;
+      }
+
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch("/api/connections", {
+          headers: { authorization: `Bearer ${token}` },
+        });
+
+        if (!res.ok) throw new Error("Unable to load connections");
+
+        const data = await res.json();
+        const connected = Array.isArray(data) && data.some((connection: any) => connection.platformId === "youtube" && connection.connected);
+
+        if (active) {
+          setYoutubeConnected(connected);
+        }
+      } catch {
+        if (active) {
+          setYoutubeConnected(false);
+        }
+      } finally {
+        if (active) {
+          setCheckingYoutubeConnection(false);
+        }
+      }
+    });
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
 
   return (
     <div className="page-enter">
@@ -36,6 +82,18 @@ export default function PostsPage() {
         }
       />
       <div className="px-9 pb-9">
+        {!checkingYoutubeConnection && youtubeConnected ? (
+          <div className="mb-6">
+            <YouTubeVideoList />
+          </div>
+        ) : null}
+
+        {!checkingYoutubeConnection && !youtubeConnected ? (
+          <div className="mb-6 rounded-2xl border border-cyan-border/15 bg-cyan-light/[0.03] p-4 text-sm text-mint-700">
+            Connect your YouTube channel from the Connect page to show your latest uploads here.
+          </div>
+        ) : null}
+
         {/* Filters bar */}
         <div className="flex items-center gap-3 mb-5">
           {PLATFORM_FILTERS.map((f) => (
