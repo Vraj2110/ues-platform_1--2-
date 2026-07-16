@@ -94,6 +94,12 @@ export default function PostsPage() {
           </div>
         ) : null}
 
+        {/* Loading indicator for YouTube content */}
+        {checkingYoutubeConnection && (
+          <div className="mb-6 text-mint-700">
+            Loading YouTube connection status...
+          </div>
+        )}
         {/* Filters bar */}
         <div className="flex items-center gap-3 mb-5">
           {PLATFORM_FILTERS.map((f) => (

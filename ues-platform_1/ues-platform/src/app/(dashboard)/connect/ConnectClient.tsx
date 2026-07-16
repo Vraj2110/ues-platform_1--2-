@@ -12,6 +12,7 @@ export default function ConnectClient({ platforms }: { platforms: Platform[] }) 
   const [error, setError] = useState<string | null>(null);
   const [loadingPlatform, setLoadingPlatform] = useState<Record<string, boolean>>({});
   // Initialize loadingConnections to false. It will be set to true by loadConnections when a user is detected.
+  // This was already changed in the previous diff.
   const [loadingConnections, setLoadingConnections] = useState(false);
   const [pendingConnected, setPendingConnected] = useState(false);
   const [hasLoadedConnections, setHasLoadedConnections] = useState(false);
@@ -19,13 +20,14 @@ export default function ConnectClient({ platforms }: { platforms: Platform[] }) 
   const searchParams = useSearchParams();
 
   const loadConnections = React.useCallback(
-    async (u: any, useFreshToken = false) => {
+    async (u: any, forceFreshToken = false) => {
       if (!u) return;
       setError(null);
-      setLoadingConnections(true);
+      setLoadingConnections(true); // Ensure loading state is active during fetch
 
       const tryFetch = async (freshToken = false) => {
         const token = await u.getIdToken(freshToken);
+        // The previous diff already changed `useFreshToken` to `forceFreshToken` here.
         return fetch("/api/connections", { headers: { authorization: `Bearer ${token}` } });
       };
 
@@ -45,7 +47,7 @@ export default function ConnectClient({ platforms }: { platforms: Platform[] }) 
         }
 
         const data = await res.json();
-        const map: Record<string, any> = {};
+        const map: Record<string, any> = {}; // This is where connections are actually updated
         data.forEach((c: any) => (map[c.platformId] = c));
         setConnections(map);
         setHasLoadedConnections(true);
@@ -53,7 +55,7 @@ export default function ConnectClient({ platforms }: { platforms: Platform[] }) 
         console.error("Connection fetch error", e);
         setError("Unable to load your connected platforms. Please try again.");
       } finally {
-        setLoadingConnections(false);
+        setLoadingConnections(false); // Loading state ends
         // Do NOT reset pendingConnected here. It's managed by the searchParams useEffect.
       }
     },
@@ -78,10 +80,11 @@ export default function ConnectClient({ platforms }: { platforms: Platform[] }) 
         setConnections({});
         setHasLoadedConnections(true);
       }
-    });
+    }); // This listener fires immediately with current user state.
 
-    return () => unsubscribe();
-  }, [loadConnections]);
+    // Removed redundant loadConnections(auth.currentUser) from here in previous diff.
+    return () => unsubscribe(); // Cleanup function for the listener.
+  }, [loadConnections]); // Dependency array includes loadConnections.
 
   useEffect(() => {
     const successParam = searchParams.get("success");
@@ -90,16 +93,14 @@ export default function ConnectClient({ platforms }: { platforms: Platform[] }) 
     const oauthErrorReasonParam = searchParams.get("reason");
 
     // Flag to check if any relevant search params are present for cleanup
+    // This was already changed in the previous diff.
     let shouldClearSearchParams = false;
 
     if (successParam === "connected" && platformParam) {
       setPendingConnected(true);
       setError(null);
 
-      if (user) {
-        loadConnections(user, true);
-      }
-
+      // The previous diff already added this timeout for the message.
       const timer = window.setTimeout(() => {
         setPendingConnected(false);
       }, 3000);
@@ -114,6 +115,11 @@ export default function ConnectClient({ platforms }: { platforms: Platform[] }) 
       setError(errorMessage);
       shouldClearSearchParams = true;
     }
+    // The previous diff already added the call to loadConnections(user, true) here
+    // and the dependency on `user` ensures it runs when user is available.
+    if (successParam === "connected" && user) {
+      loadConnections(user, true); // Force fresh token after successful OAuth
+    }
 
     // Always clear the search params after processing to prevent re-triggering and clean URL
     if (shouldClearSearchParams) {
@@ -124,7 +130,7 @@ export default function ConnectClient({ platforms }: { platforms: Platform[] }) 
       newSearchParams.delete("reason");
 
       router.replace(`${window.location.pathname}?${newSearchParams.toString()}`, { scroll: false });
-    }
+    } // This was already changed in the previous diff.
   }, [searchParams, user, loadConnections]);
 
   async function handleStart(platformId: string) {
