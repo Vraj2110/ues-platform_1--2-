@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyIdToken } from "@/lib/server/auth";
 import { getUserConnectionSecrets, getUserYoutubeAnalytics } from "@/lib/server/connections";
-import { fetchYouTubeAnalyticsReport, refreshGoogleToken } from "@/lib/server/oauth";
+import { fetchYouTubeAnalyticsReport, refreshGoogleToken, getMockYouTubeAnalytics } from "@/lib/server/oauth";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +22,11 @@ export async function GET(request: Request) {
 
     const refreshToken = typeof secrets.refreshToken === "string" ? secrets.refreshToken : undefined;
     const accessToken = typeof secrets.accessToken === "string" ? secrets.accessToken : null;
+    const isMockConnection = secrets.mockConnection === true || accessToken === "mock-access-token";
+
+    if (isMockConnection) {
+      return NextResponse.json(getMockYouTubeAnalytics());
+    }
 
     if (!accessToken) {
       return NextResponse.json({ connected: false, error: "No access token available" }, { status: 404 });

@@ -9,19 +9,10 @@ import {
   PlatformPieChart,
 } from "@/components/charts/Charts";
 import YouTubeAnalyticsDashboard from "@/components/dashboard/YouTubeAnalyticsDashboard";
-import { POSTS, PLATFORM_DISTRIBUTION } from "@/lib/data";
+import { TopPostsWidget } from "@/components/dashboard/TopPostsWidget";
+import { PLATFORM_DISTRIBUTION } from "@/lib/data";
 
 export const metadata: Metadata = { title: "Analytics" };
-
-const TOP_POSTS = [...POSTS].sort((a, b) => b.uesScore - a.uesScore).slice(0, 3);
-
-const platformIcons: Record<string, string> = {
-  instagram: "📸", youtube: "▶️", twitter: "🐦", linkedin: "💼",
-};
-const platformNames: Record<string, string> = {
-  instagram: "Instagram", youtube: "YouTube", twitter: "X / Twitter", linkedin: "LinkedIn",
-};
-const scoreColor = (s: number) => s >= 70 ? "#4ECDC4" : "#FF6B6B";
 
 const TABS = ["Overview", "Trends", "Comparison", "Benchmark"];
 
@@ -141,38 +132,7 @@ export default function AnalyticsPage() {
             </div>
           </Card>
 
-          <Card>
-            <CardTitle>Top Performing Posts</CardTitle>
-            <CardSubtitle>Highest UES scores this month</CardSubtitle>
-            <div className="mt-5 space-y-3">
-              {TOP_POSTS.map((post, i) => (
-                <div
-                  key={post.id}
-                  className="flex items-center gap-3 p-3 rounded-xl bg-teal-surface border border-cyan-border/8"
-                >
-                  <span className="font-display font-extrabold text-lg text-mint-300 w-6">
-                    {i + 1}
-                  </span>
-                  <div className="w-9 h-9 rounded-lg bg-teal-card flex items-center justify-center text-xl flex-shrink-0">
-                    {platformIcons[post.platform]}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{post.title}</p>
-                    <p className="text-xs text-mint-700">{platformNames[post.platform]}</p>
-                  </div>
-                  <span
-                    className="font-display font-bold text-base"
-                    style={{ color: scoreColor(post.uesScore) }}
-                  >
-                    {post.uesScore}
-                  </span>
-                </div>
-              ))}
-              <Button variant="ghost" size="sm" className="w-full mt-1">
-                View all posts →
-              </Button>
-            </div>
-          </Card>
+          <TopPostsWidget />
         </div>
       </div>
     </div>

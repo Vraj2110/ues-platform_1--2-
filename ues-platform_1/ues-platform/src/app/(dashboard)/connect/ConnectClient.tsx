@@ -1,41 +1,33 @@
+"use client";
 import React, { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import { Badge, ConnectedBadge } from "@/components/ui/Badge";
 import { auth } from "@/lib/firebase";
 import type { Platform } from "@/types";
-import YouTubeVideoList from "@/components/dashboard/YouTubeVideoList";
 
 export default function ConnectClient({ platforms }: { platforms: Platform[] }) {
   const [connections, setConnections] = useState<Record<string, any>>({});
   const [user, setUser] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingPlatform, setLoadingPlatform] = useState<Record<string, boolean>>({});
-  // Initialize loadingConnections to false. It will be set to true by loadConnections when a user is detected.
-  // This was already changed in the previous diff.
   const [loadingConnections, setLoadingConnections] = useState(false);
   const [pendingConnected, setPendingConnected] = useState(false);
   const [hasLoadedConnections, setHasLoadedConnections] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  const safePlatforms = Array.isArray(platforms) ? platforms : [];
+
   const loadConnections = React.useCallback(
-    async (u: any, forceFreshToken = false) => {
+    async (u: any) => {
       if (!u) return;
       setError(null);
-      setLoadingConnections(true); // Ensure loading state is active during fetch
-
-      const tryFetch = async (freshToken = false) => {
-        const token = await u.getIdToken(freshToken);
-        // The previous diff already changed `useFreshToken` to `forceFreshToken` here.
-        return fetch("/api/connections", { headers: { authorization: `Bearer ${token}` } });
-      };
+      setLoadingConnections(true);
 
       try {
-        let res = await tryFetch(useFreshToken);
-        if (res.status === 401) {
-          res = await tryFetch(true);
-        }
+        const token = await u.getIdToken();
+        const res = await fetch("/api/connections", { headers: { authorization: `Bearer ${token}` } });
 
         if (!res.ok) {
           if (res.status === 401) {
@@ -47,91 +39,132 @@ export default function ConnectClient({ platforms }: { platforms: Platform[] }) 
         }
 
         const data = await res.json();
-        const map: Record<string, any> = {}; // This is where connections are actually updated
-        data.forEach((c: any) => (map[c.platformId] = c));
+        const map: Record<string, any> = {};
+        if (Array.isArray(data)) {
+          data.forEach((c: any) => {
+            if (c?.platformId) {
+              map[c.platformId] = c;
+            }
+          });
+        }
         setConnections(map);
+        if (typeof window !== "undefined") {
+          localStorage.setItem("ues_connections", JSON.stringify(map));
+        }
         setHasLoadedConnections(true);
       } catch (e) {
         console.error("Connection fetch error", e);
         setError("Unable to load your connected platforms. Please try again.");
       } finally {
-        setLoadingConnections(false); // Loading state ends
-        // Do NOT reset pendingConnected here. It's managed by the searchParams useEffect.
+        setLoadingConnections(false);
       }
     },
     [router]
   );
 
   useEffect(() => {
-    // The onAuthStateChanged listener fires immediately with the current user's state.
-    // Therefore, an explicit `loadConnections(auth.currentUser)` outside the listener
-    // is generally not needed and can lead to redundant fetches or race conditions.
-    // The initial `useState(false)` for `loadingConnections` combined with the
-    // `onAuthStateChanged` callback handles the initial load correctly.
-    const unsubscribe = auth.onAuthStateChanged((u) => {
-      setUser(u);
-      if (u) {
-        // When a user is found (either initially or after sign-in), load their connections.
-        // `setLoadingConnections(true)` is handled inside `loadConnections`.
-        loadConnections(u);
-      } else {
-        // If no user, clear connections and stop loading
-        setLoadingConnections(false);
-        setConnections({});
-        setHasLoadedConnections(true);
-      }
-    }); // This listener fires immediately with current user state.
-
-    // Removed redundant loadConnections(auth.currentUser) from here in previous diff.
-    return () => unsubscribe(); // Cleanup function for the listener.
-  }, [loadConnections]); // Dependency array includes loadConnections.
+    if (typeof window !== "undefined") {
+      try {
+        const cached = localStorage.getItem("ues_connections");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && typeof parsed === "object") {
+            setConnections(parsed);
+          }
+        }
+      } catch {}
+    }
+  }, []);
 
   useEffect(() => {
-    const successParam = searchParams.get("success");
-    const platformParam = searchParams.get("platform");
-    const oauthErrorParam = searchParams.get("error");
-    const oauthErrorReasonParam = searchParams.get("reason");
+    try {
+      const unsubscribe = auth.onAuthStateChanged((u) => {
+        setUser(u);
+        if (u) {
+          loadConnections(u);
+        } else {
+          setLoadingConnections(false);
+          setConnections({});
+          setHasLoadedConnections(true);
+        }
+      });
 
-    // Flag to check if any relevant search params are present for cleanup
-    // This was already changed in the previous diff.
-    let shouldClearSearchParams = false;
-
-    if (successParam === "connected" && platformParam) {
-      setPendingConnected(true);
-      setError(null);
-
-      // The previous diff already added this timeout for the message.
-      const timer = window.setTimeout(() => {
-        setPendingConnected(false);
-      }, 3000);
-
-      shouldClearSearchParams = true;
-      return () => clearTimeout(timer);
-    } else if (oauthErrorParam || oauthErrorReasonParam) {
-      // If there's an OAuth error, display it
-      const errorMessage = oauthErrorParam
-        ? `${oauthErrorParam.replace(/_/g, " ")}${oauthErrorReasonParam ? `: ${decodeURIComponent(oauthErrorReasonParam)}` : ""}`
-        : "An unknown OAuth error occurred.";
-      setError(errorMessage);
-      shouldClearSearchParams = true;
+      return () => unsubscribe();
+    } catch (e) {
+      console.error("Auth listener setup failed", e);
+      setError("Unable to initialize the connection page.");
+      return undefined;
     }
-    // The previous diff already added the call to loadConnections(user, true) here
-    // and the dependency on `user` ensures it runs when user is available.
-    if (successParam === "connected" && user) {
-      loadConnections(user, true); // Force fresh token after successful OAuth
+  }, [loadConnections]);
+
+  const processedParamsRef = React.useRef<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const currentQuery = searchParams?.toString() || "";
+      if (processedParamsRef.current === currentQuery) {
+        return;
+      }
+
+      const successParam = searchParams?.get("success");
+      const platformParam = searchParams?.get("platform");
+      const oauthErrorParam = searchParams?.get("error");
+      const oauthErrorReasonParam = searchParams?.get("reason");
+
+      if (!successParam && !platformParam && !oauthErrorParam && !oauthErrorReasonParam) {
+        processedParamsRef.current = currentQuery;
+        return;
+      }
+
+      processedParamsRef.current = currentQuery;
+      let shouldClearSearchParams = false;
+
+      if (successParam === "connected" && platformParam) {
+        const optimisticPlatformId = platformParam || "youtube";
+        setPendingConnected(true);
+        setError(null);
+        setConnections((prev) => ({
+          ...prev,
+          [optimisticPlatformId]: {
+            ...(prev[optimisticPlatformId] || {}),
+            connected: true,
+            platformId: optimisticPlatformId,
+            accountName: prev[optimisticPlatformId]?.accountName || "Your connected channel",
+            lastSync: new Date().toISOString(),
+          },
+        }));
+        if (user) {
+          loadConnections(user);
+        }
+        window.setTimeout(() => {
+          setPendingConnected(false);
+        }, 3000);
+        shouldClearSearchParams = true;
+      } else if (oauthErrorParam || oauthErrorReasonParam) {
+        const errorMessage = oauthErrorParam
+          ? `${oauthErrorParam.replace(/_/g, " ")}${oauthErrorReasonParam ? `: ${decodeURIComponent(oauthErrorReasonParam)}` : ""}`
+          : "An unknown OAuth error occurred.";
+        setError(errorMessage);
+        shouldClearSearchParams = true;
+      }
+
+      if (shouldClearSearchParams && typeof window !== "undefined") {
+        const newSearchParams = new URLSearchParams(searchParams?.toString() || "");
+        newSearchParams.delete("success");
+        newSearchParams.delete("platform");
+        newSearchParams.delete("error");
+        newSearchParams.delete("reason");
+
+        const newPath = newSearchParams.toString()
+          ? `${window.location.pathname}?${newSearchParams.toString()}`
+          : window.location.pathname;
+
+        router.replace(newPath, { scroll: false });
+      }
+    } catch (e) {
+      console.error("Search params handling failed", e);
     }
-
-    // Always clear the search params after processing to prevent re-triggering and clean URL
-    if (shouldClearSearchParams) {
-      const newSearchParams = new URLSearchParams(searchParams.toString());
-      newSearchParams.delete("success");
-      newSearchParams.delete("platform");
-      newSearchParams.delete("error");
-      newSearchParams.delete("reason");
-
-      router.replace(`${window.location.pathname}?${newSearchParams.toString()}`, { scroll: false });
-    } // This was already changed in the previous diff.
-  }, [searchParams, user, loadConnections]);
+  }, [searchParams, user, loadConnections, router]);
 
   async function handleStart(platformId: string) {
     if (!user) {
@@ -162,7 +195,9 @@ export default function ConnectClient({ platforms }: { platforms: Platform[] }) 
 
       const data = await res.json();
       if (data?.url) {
-        window.location.href = data.url;
+        if (typeof window !== "undefined") {
+          window.location.assign(data.url);
+        }
       } else {
         setError("Unexpected response from the server.");
       }
@@ -197,16 +232,16 @@ export default function ConnectClient({ platforms }: { platforms: Platform[] }) 
   const PLATFORM_DESC: Record<string, string> = {
     instagram: "Likes, comments, saves, reach, and story views normalized to UES.",
     youtube: "Views, likes, comments, watch time, and subscriber delta.",
-    twitter: "Likes, retweets, replies, impressions, and profile clicks.",
+    x: "Likes, retweets, replies, impressions, and profile clicks.",
     linkedin: "Reactions, comments, shares, impressions, and click-through.",
     tiktok: "Views, likes, comments, shares, and completion rate.",
     facebook: "Reactions, comments, shares, reach, and page engagement.",
   };
 
-  const successConnected = searchParams.get("success") === "connected";
-  const justConnectedPlatform = searchParams.get("platform");
-  const oauthError = searchParams.get("error");
-  const oauthErrorReason = searchParams.get("reason");
+  const successConnected = searchParams?.get("success") === "connected";
+  const justConnectedPlatform = searchParams?.get("platform");
+  const oauthError = searchParams?.get("error");
+  const oauthErrorReason = searchParams?.get("reason");
   const showErrorMessage = oauthError
     ? `${oauthError.replace(/_/g, " ")}${oauthErrorReason ? `: ${decodeURIComponent(oauthErrorReason)}` : ""}`
     : error;
@@ -224,10 +259,11 @@ export default function ConnectClient({ platforms }: { platforms: Platform[] }) 
         </div>
       ) : null}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-        {platforms.map((platform) => {
+        {safePlatforms.map((platform) => {
           const connected =
             !!connections[platform.id]?.connected ||
             (successConnected && justConnectedPlatform === platform.id);
+          const connection = connections[platform.id];
           const isLoading = loadingConnections || !!loadingPlatform[platform.id];
           return (
             <Card
@@ -235,7 +271,7 @@ export default function ConnectClient({ platforms }: { platforms: Platform[] }) 
               className={connected ? "border-cyan-border/35 bg-cyan-light/[0.04]" : ""}
             >
               <div className="text-4xl mb-3">{platform.icon}</div>
-              <div className="flex items-center gap-2 mb-5">
+              <div className="flex items-center gap-2 mb-2">
                 <h3 className="font-display font-bold text-base">{platform.name}</h3>
                 {connected && platform.id === "youtube" && <ConnectedBadge />}
                 {connected && platform.id !== "youtube" && (
@@ -244,15 +280,25 @@ export default function ConnectClient({ platforms }: { platforms: Platform[] }) 
                   </Badge>
                 )}
               </div>
+              {connected ? (
+                <div className="mb-4 rounded-xl border border-cyan-border/20 bg-cyan-light/[0.06] px-3 py-2 text-xs text-cyan-ues">
+                  {connection?.accountName ? `Connected to ${connection.accountName}` : "Connected and ready for analysis"}
+                </div>
+              ) : null}
               <p className="text-sm text-mint-700 mb-5 leading-relaxed min-h-[44px]">{PLATFORM_DESC[platform.id]}</p>
               {connected ? (
-                <button
-                  onClick={() => handleDisconnect(platform.id)}
-                  className="btn w-full bg-pink-light text-pink-ues border border-pink-ues/30 hover:bg-pink-ues/10"
-                  disabled={isLoading}
-                >
-                  Disconnect
-                </button>
+                <div className="space-y-2">
+                  <div className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-cyan-mid/20 text-cyan-ues font-display font-semibold text-sm border border-cyan-border/40">
+                    <span>✓ Connected</span>
+                  </div>
+                  <button
+                    onClick={() => handleDisconnect(platform.id)}
+                    className="text-xs text-mint-700 hover:text-pink-ues transition w-full text-center py-1 cursor-pointer"
+                    disabled={isLoading}
+                  >
+                    Disconnect channel
+                  </button>
+                </div>
               ) : (
                 <button
                   onClick={() => handleStart(platform.id)}
@@ -266,9 +312,6 @@ export default function ConnectClient({ platforms }: { platforms: Platform[] }) 
           );
         })}
       </div>
-
-      {/* YouTube Content Section - Shows when YouTube is connected */}
-      {(connections.youtube?.connected || (successConnected && justConnectedPlatform === "youtube")) && <YouTubeVideoList />}
     </>
   );
 }

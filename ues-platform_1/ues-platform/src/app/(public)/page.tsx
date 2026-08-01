@@ -64,7 +64,7 @@ export default function HomePage() {
               const color =
                 p.id === "instagram" ? "#FF6B6B"
                   : p.id === "youtube" ? "#4ECDC4"
-                  : p.id === "twitter" ? "rgba(247,255,247,0.7)"
+                  : p.id === "x" ? "rgba(247,255,247,0.7)"
                   : "rgba(78,205,196,0.7)";
               return (
                 <div

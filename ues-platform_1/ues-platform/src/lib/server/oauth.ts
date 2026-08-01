@@ -7,13 +7,90 @@ const YOUTUBE_CHANNELS_URL = "https://www.googleapis.com/youtube/v3/channels";
 const YOUTUBE_SEARCH_URL = "https://www.googleapis.com/youtube/v3/search";
 const YOUTUBE_ANALYTICS_URL = "https://youtubeanalytics.googleapis.com/v2/reports";
 const INSTAGRAM_AUTH_URL = "https://api.instagram.com/oauth/authorize";
-const INSTAGRAM_TOKEN_URL = "https://graph.instagram.com/oauth/access_token";
+const INSTAGRAM_TOKEN_URL = "https://api.instagram.com/oauth/access_token";
 const INSTAGRAM_PROFILE_URL = "https://graph.instagram.com/me";
+const FACEBOOK_AUTH_URL = "https://www.facebook.com/v19.0/dialog/oauth";
+const FACEBOOK_TOKEN_URL = "https://graph.facebook.com/v19.0/oauth/access_token";
+const FACEBOOK_PROFILE_URL = "https://graph.facebook.com/v19.0/me";
+const THREADS_AUTH_URL = "https://threads.net/oauth/authorize";
+const THREADS_TOKEN_URL = "https://graph.threads.net/oauth/access_token";
+const THREADS_PROFILE_URL = "https://graph.threads.net/v1.0/me";
+const TWITTER_AUTH_URL = "https://twitter.com/i/oauth2/authorize";
+const TWITTER_TOKEN_URL = "https://api.twitter.com/2/oauth2/token";
+const TWITTER_PROFILE_URL = "https://api.twitter.com/2/users/me";
 
-function getEnv(name: string): string {
-  const value = process.env[name];
+import crypto from "crypto";
+
+function getEnv(name: string, fallback?: string): string {
+  const value = process.env[name] ?? fallback;
   if (!value) throw new Error(`Missing environment variable ${name}`);
   return value;
+}
+
+function getGoogleClientConfig() {
+  const clientId = getEnv("GOOGLE_CLIENT_ID");
+  const clientSecret = getEnv("GOOGLE_CLIENT_SECRET");
+  if (clientId.includes("YOUR_GOOGLE") || clientSecret.includes("YOUR_GOOGLE")) {
+    throw new Error("Google OAuth is not configured. Set real GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET values in .env.local.");
+  }
+  return { clientId, clientSecret };
+}
+
+export function isGoogleOAuthConfigured() {
+  try {
+    getGoogleClientConfig();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function getMockYouTubeVideos() {
+  return {
+    videos: [
+      {
+        id: "mock-video-1",
+        title: "Welcome to your connected YouTube channel",
+        thumbnailUrl: "https://i.ytimg.com/vi/2Vv-BfVoq4g/hqdefault.jpg",
+        publishedAt: "2026-07-10T10:00:00.000Z",
+      },
+      {
+        id: "mock-video-2",
+        title: "Recent upload from your channel",
+        thumbnailUrl: "https://i.ytimg.com/vi/ScMzIvxBSi4/hqdefault.jpg",
+        publishedAt: "2026-07-08T10:00:00.000Z",
+      },
+      {
+        id: "mock-video-3",
+        title: "Your latest content is now visible here",
+        thumbnailUrl: "https://i.ytimg.com/vi/aqz-KE-bpKQ/hqdefault.jpg",
+        publishedAt: "2026-07-05T10:00:00.000Z",
+      },
+    ],
+  };
+}
+
+export function getMockYouTubeAnalytics() {
+  return {
+    connected: true,
+    period: { startDate: "2026-06-14", endDate: "2026-07-13" },
+    totals: {
+      views: 18240,
+      estimatedMinutesWatched: 9840,
+      subscribersGained: 128,
+      likes: 942,
+    },
+    trend: [
+      { date: "2026-06-14", views: 520, estimatedMinutesWatched: 310, subscribersGained: 3, likes: 24 },
+      { date: "2026-06-15", views: 610, estimatedMinutesWatched: 370, subscribersGained: 5, likes: 31 },
+      { date: "2026-06-16", views: 680, estimatedMinutesWatched: 410, subscribersGained: 7, likes: 38 },
+      { date: "2026-06-17", views: 760, estimatedMinutesWatched: 440, subscribersGained: 8, likes: 42 },
+      { date: "2026-06-18", views: 820, estimatedMinutesWatched: 500, subscribersGained: 9, likes: 47 },
+      { date: "2026-06-19", views: 900, estimatedMinutesWatched: 560, subscribersGained: 10, likes: 52 },
+      { date: "2026-06-20", views: 980, estimatedMinutesWatched: 600, subscribersGained: 11, likes: 58 },
+    ],
+    generatedAt: new Date().toISOString(),
+  };
 }
 
 function formatDate(date: Date) {
@@ -34,6 +111,7 @@ export type OAuthStateRecord = {
   uid: string;
   platform: string;
   createdAt: number;
+  codeVerifier?: string;
 };
 
 const oauthStateDoc = (state: string) => adminDb.collection("oauthStates").doc(state);
@@ -70,28 +148,34 @@ async function deleteOAuthState(state: string) {
   inMemoryOAuthStates.delete(state);
 }
 
-export async function createOAuthState(uid: string, platform: string) {
-  const state = cryptoRandom();
-  await saveOAuthState(state, {
+export async function createOAuthState(uid: string, platform: string, codeVerifier?: string) {
+  const payload: OAuthStateRecord = {
     uid,
     platform,
     createdAt: Date.now(),
-  });
+    codeVerifier,
+  };
+  const state = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  await saveOAuthState(state, payload);
   return state;
 }
 
 export async function resolveOAuthState(state: string) {
+  if (!state) return null;
   const record = await getOAuthState(state);
-  if (!record) return null;
+  if (record) return record;
 
-  const age = Date.now() - record.createdAt;
-  if (age > 1000 * 60 * 15) {
-    await deleteOAuthState(state);
-    return null;
+  try {
+    const decodedStr = Buffer.from(state, "base64url").toString("utf-8");
+    const payload = JSON.parse(decodedStr);
+    if (payload?.uid && payload?.platform) {
+      return payload as OAuthStateRecord;
+    }
+  } catch {
+    // ignore parsing failure
   }
 
-  await deleteOAuthState(state);
-  return record;
+  return null;
 }
 
 function cryptoRandom() {
@@ -100,16 +184,19 @@ function cryptoRandom() {
     .join("");
 }
 
-export function getGoogleOAuthUrl(state: string) {
+export function getGoogleOAuthUrl(state: string, redirectUri?: string) {
+  const { clientId } = getGoogleClientConfig();
   const params = new URLSearchParams({
     response_type: "code",
-    client_id: getEnv("GOOGLE_CLIENT_ID"),
-    redirect_uri: getEnv("GOOGLE_REDIRECT_URI"),
+    client_id: clientId,
+    redirect_uri: redirectUri ?? getEnv("GOOGLE_REDIRECT_URI"),
     scope: [
       "openid",
       "profile",
       "email",
       "https://www.googleapis.com/auth/youtube.readonly",
+      "https://www.googleapis.com/auth/youtube.upload",
+      "https://www.googleapis.com/auth/youtube",
       "https://www.googleapis.com/auth/yt-analytics.readonly",
     ].join(" "),
     access_type: "offline",
@@ -120,12 +207,13 @@ export function getGoogleOAuthUrl(state: string) {
   return `${GOOGLE_AUTH_URL}?${params.toString()}`;
 }
 
-export async function exchangeGoogleCode(code: string) {
+export async function exchangeGoogleCode(code: string, redirectUri?: string) {
+  const { clientId, clientSecret } = getGoogleClientConfig();
   const body = new URLSearchParams({
     code,
-    client_id: getEnv("GOOGLE_CLIENT_ID"),
-    client_secret: getEnv("GOOGLE_CLIENT_SECRET"),
-    redirect_uri: getEnv("GOOGLE_REDIRECT_URI"),
+    client_id: clientId,
+    client_secret: clientSecret,
+    redirect_uri: redirectUri ?? getEnv("GOOGLE_REDIRECT_URI"),
     grant_type: "authorization_code",
   });
   const response = await fetch(GOOGLE_TOKEN_URL, { method: "POST", body });
@@ -216,16 +304,16 @@ export async function fetchYouTubeAnalyticsReport(accessToken: string, refreshTo
   return request(accessToken);
 }
 
-export async function fetchYouTubeRecentVideos(accessToken: string, refreshToken?: string, maxResults = 8) {
-  const url = new URL(YOUTUBE_SEARCH_URL);
-  url.searchParams.set("part", "snippet");
-  url.searchParams.set("forMine", "true");
-  url.searchParams.set("type", "video");
-  url.searchParams.set("order", "date");
-  url.searchParams.set("maxResults", String(maxResults));
+export async function fetchYouTubeRecentVideos(accessToken: string, refreshToken?: string, maxResults = 50) {
+  const searchUrl = new URL(YOUTUBE_SEARCH_URL);
+  searchUrl.searchParams.set("part", "snippet");
+  searchUrl.searchParams.set("forMine", "true");
+  searchUrl.searchParams.set("type", "video");
+  searchUrl.searchParams.set("order", "date");
+  searchUrl.searchParams.set("maxResults", String(maxResults));
 
   async function request(token: string) {
-    const res = await fetch(url.toString(), {
+    const res = await fetch(searchUrl.toString(), {
       headers: { Authorization: `Bearer ${token}` },
     });
 
@@ -241,16 +329,275 @@ export async function fetchYouTubeRecentVideos(accessToken: string, refreshToken
       throw new Error(`YouTube recent videos fetch failed (${res.status}): ${text}`);
     }
 
-    const data = await res.json();
-    return (data.items || []).map((item: any) => ({
-      id: item.id.videoId,
-      title: item.snippet.title,
-      thumbnailUrl: item.snippet.thumbnails?.medium?.url || item.snippet.thumbnails?.default?.url || "",
-      publishedAt: item.snippet.publishedAt,
-    }));
+    const searchData = await res.json();
+    const items = Array.isArray(searchData.items) ? searchData.items : [];
+    const videoIds = items.map((item: any) => item.id?.videoId || item.id).filter(Boolean).join(",");
+
+    if (!videoIds) {
+      return [];
+    }
+
+    // Fetch real-time statistics (views, likes, comments) AND status from YouTube Videos API
+    const videosUrl = new URL("https://www.googleapis.com/youtube/v3/videos");
+    videosUrl.searchParams.set("part", "snippet,statistics,status");
+    videosUrl.searchParams.set("id", videoIds);
+
+    const statsRes = await fetch(videosUrl.toString(), {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!statsRes.ok) {
+      // Fallback to snippet if statistics call fails
+      return items.map((item: any) => ({
+        id: item.id?.videoId || item.id,
+        title: item.snippet?.title || "YouTube Video",
+        thumbnailUrl: item.snippet?.thumbnails?.medium?.url || item.snippet?.thumbnails?.default?.url || "",
+        publishedAt: item.snippet?.publishedAt || new Date().toISOString(),
+        views: 0,
+        likes: 0,
+        comments: 0,
+      }));
+    }
+    const statsData = await statsRes.json();
+    const detailItems = Array.isArray(statsData.items) ? statsData.items : [];
+
+    return detailItems
+      .filter((item: any) => {
+        // Only return PUBLIC videos — filter out private and unlisted
+        const privacy = item.status?.privacyStatus;
+        return !privacy || privacy === "public";
+      })
+      .map((item: any) => ({
+        id: item.id,
+        title: item.snippet?.title || "YouTube Video",
+        thumbnailUrl: item.snippet?.thumbnails?.medium?.url || item.snippet?.thumbnails?.default?.url || "",
+        publishedAt: item.snippet?.publishedAt || new Date().toISOString(),
+        views: Number(item.statistics?.viewCount || 0),
+        likes: Number(item.statistics?.likeCount || 0),
+        comments: Number(item.statistics?.commentCount || 0),
+        privacyStatus: item.status?.privacyStatus || "public",
+      }));
   }
 
   return request(accessToken);
+}
+
+// ─── Twitter / X ────────────────────────────────────────────────────────────
+
+export async function fetchTwitterRecentTweets(accessToken: string, maxResults = 20) {
+  // Get the authenticated user's ID first
+  const userRes = await fetch("https://api.twitter.com/2/users/me", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!userRes.ok) throw new Error(`Twitter user lookup failed (${userRes.status})`);
+  const userData = await userRes.json();
+  const userId = userData?.data?.id;
+  if (!userId) throw new Error("Twitter user ID not found");
+
+  const params = new URLSearchParams({
+    max_results: String(Math.min(maxResults, 100)),
+    "tweet.fields": "created_at,public_metrics,attachments",
+    "media.fields": "preview_image_url,url",
+    expansions: "attachments.media_keys",
+    exclude: "retweets,replies",
+  });
+
+  const tweetsRes = await fetch(
+    `https://api.twitter.com/2/users/${userId}/tweets?${params.toString()}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+
+  if (!tweetsRes.ok) {
+    const text = await tweetsRes.text();
+    throw new Error(`Twitter tweets fetch failed (${tweetsRes.status}): ${text}`);
+  }
+
+  const data = await tweetsRes.json();
+  const tweets = Array.isArray(data?.data) ? data.data : [];
+  const mediaMap: Record<string, any> = {};
+  (data?.includes?.media || []).forEach((m: any) => {
+    if (m.media_key) mediaMap[m.media_key] = m;
+  });
+
+  return tweets.map((tweet: any) => {
+    const metrics = tweet.public_metrics || {};
+    const mediaKeys = tweet.attachments?.media_keys || [];
+    const firstMedia = mediaKeys[0] ? mediaMap[mediaKeys[0]] : null;
+    return {
+      id: tweet.id,
+      text: tweet.text || "",
+      thumbnailUrl: firstMedia?.preview_image_url || firstMedia?.url || null,
+      publishedAt: tweet.created_at || new Date().toISOString(),
+      likes: Number(metrics.like_count || 0),
+      retweets: Number(metrics.retweet_count || 0),
+      replies: Number(metrics.reply_count || 0),
+      views: Number(metrics.impression_count || 0),
+      quotes: Number(metrics.quote_count || 0),
+    };
+  });
+}
+
+// ─── Instagram ───────────────────────────────────────────────────────────────
+
+export async function fetchInstagramRecentMedia(accountId: string, accessToken: string, limit = 20) {
+  const params = new URLSearchParams({
+    fields: "id,caption,media_type,media_url,thumbnail_url,timestamp,like_count,comments_count,permalink",
+    limit: String(limit),
+    access_token: accessToken,
+  });
+
+  const res = await fetch(`https://graph.instagram.com/v20.0/${accountId}/media?${params.toString()}`);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Instagram media fetch failed (${res.status}): ${text}`);
+  }
+  const data = await res.json();
+  const items = Array.isArray(data?.data) ? data.data : [];
+
+  return items.map((item: any) => ({
+    id: item.id,
+    caption: item.caption || "",
+    mediaType: item.media_type || "IMAGE",
+    thumbnailUrl: item.thumbnail_url || item.media_url || "",
+    permalink: item.permalink || `https://instagram.com/p/${item.id}`,
+    publishedAt: item.timestamp || new Date().toISOString(),
+    likes: Number(item.like_count || 0),
+    comments: Number(item.comments_count || 0),
+  }));
+}
+
+// ─── Facebook ────────────────────────────────────────────────────────────────
+
+export async function fetchFacebookRecentPosts(accessToken: string, limit = 20) {
+  const pagesRes = await fetch(
+    `https://graph.facebook.com/v19.0/me/accounts?access_token=${accessToken}`
+  );
+  
+  let pages = [{ id: "me", access_token: accessToken }];
+
+  if (pagesRes.ok) {
+    const pagesData = await pagesRes.json();
+    if (Array.isArray(pagesData?.data) && pagesData.data.length > 0) {
+      pages = pagesData.data; // use all pages available
+    }
+  }
+
+  const allItems: any[] = [];
+
+  for (const page of pages) {
+    const params = new URLSearchParams({
+      fields: "id,message,story,full_picture,created_time,reactions.summary(total_count),comments.summary(total_count),shares",
+      limit: String(limit),
+      access_token: page.access_token || accessToken,
+    });
+
+    const postsRes = await fetch(`https://graph.facebook.com/v19.0/${page.id}/posts?${params.toString()}`);
+    if (postsRes.ok) {
+      const data = await postsRes.json();
+      if (Array.isArray(data?.data) && data.data.length > 0) {
+        allItems.push(...data.data);
+        continue;
+      }
+    }
+    
+    // Fallback: If posts endpoint fails or is empty (often the case for personal profiles without user_posts permission), try the feed endpoint
+    if (page.id === "me" || page.id === "me/") {
+      const feedRes = await fetch(`https://graph.facebook.com/v19.0/me/feed?${params.toString()}`);
+      if (feedRes.ok) {
+        const feedData = await feedRes.json();
+        if (Array.isArray(feedData?.data)) {
+          allItems.push(...feedData.data);
+        }
+      } else {
+        console.warn(`[Facebook] Failed to fetch personal feed: ${feedRes.status}`);
+      }
+    }
+  }
+
+  return allItems.map((item: any) => ({
+    id: item.id,
+    message: item.message || item.story || "",
+    thumbnailUrl: item.full_picture || "",
+    publishedAt: item.created_time || new Date().toISOString(),
+    likes: Number(item.reactions?.summary?.total_count || 0),
+    comments: Number(item.comments?.summary?.total_count || 0),
+    shares: Number(item.shares?.count || 0),
+  }));
+}
+
+// ─── LinkedIn ─────────────────────────────────────────────────────────────────
+
+export async function fetchLinkedInRecentPosts(accessToken: string) {
+  const profileRes = await fetch("https://api.linkedin.com/v2/userinfo", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!profileRes.ok) throw new Error(`LinkedIn profile fetch failed (${profileRes.status})`);
+  const profile = await profileRes.json();
+  const personId = profile?.sub;
+  if (!personId) throw new Error("LinkedIn person ID not found");
+
+  const postsRes = await fetch(
+    `https://api.linkedin.com/v2/ugcPosts?q=authors&authors=List(urn:li:person:${personId})&count=20`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "X-Restli-Protocol-Version": "2.0.0",
+      },
+    }
+  );
+
+  if (!postsRes.ok) {
+    const text = await postsRes.text();
+    throw new Error(`LinkedIn posts fetch failed (${postsRes.status}): ${text}`);
+  }
+  const data = await postsRes.json();
+  const items = Array.isArray(data?.elements) ? data.elements : [];
+
+  return items.map((item: any) => {
+    const content = item.specificContent?.["com.linkedin.ugc.ShareContent"];
+    const commentary = content?.shareCommentary?.text || "";
+    const media = content?.media?.[0];
+    const thumbnailUrl = media?.thumbnails?.[0]?.url || media?.originalUrl || "";
+    return {
+      id: item.id,
+      commentary,
+      thumbnailUrl,
+      publishedAt: item.created?.time
+        ? new Date(item.created.time).toISOString()
+        : new Date().toISOString(),
+      likes: 0,
+      comments: 0,
+    };
+  });
+}
+
+// ─── Threads ─────────────────────────────────────────────────────────────────
+
+export async function fetchThreadsRecentPosts(accessToken: string, limit = 20) {
+  const params = new URLSearchParams({
+    fields: "id,text,media_type,media_url,thumbnail_url,timestamp,shortcode,permalink",
+    limit: String(limit),
+    access_token: accessToken,
+  });
+
+  const res = await fetch(`https://graph.threads.net/v1.0/me/threads?${params.toString()}`);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Threads posts fetch failed (${res.status}): ${text}`);
+  }
+  const data = await res.json();
+  const items = Array.isArray(data?.data) ? data.data : [];
+
+  return items.map((item: any) => ({
+    id: item.id,
+    text: item.text || "",
+    mediaType: item.media_type || "TEXT",
+    thumbnailUrl: item.thumbnail_url || item.media_url || "",
+    permalink: item.permalink || `https://www.threads.net/@user/post/${item.id}`,
+    publishedAt: item.timestamp || new Date().toISOString(),
+    likes: 0,
+    replies: 0,
+  }));
 }
 
 function normalizeYouTubeAnalytics(data: any, startDate: string, endDate: string) {
@@ -282,34 +629,183 @@ function normalizeYouTubeAnalytics(data: any, startDate: string, endDate: string
   };
 }
 
-export function getInstagramOAuthUrl(state: string) {
+export function getInstagramOAuthUrl(state: string, redirectUri?: string) {
   const params = new URLSearchParams({
     client_id: getEnv("INSTAGRAM_CLIENT_ID"),
-    redirect_uri: getEnv("INSTAGRAM_REDIRECT_URI"),
-    scope: "user_profile,user_media",
+    redirect_uri: "https://localhost:3001/api/connections/oauth-callback",
+    scope: "instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments,instagram_business_content_publish,instagram_business_manage_insights",
     response_type: "code",
+    force_reauth: "true",
     state,
   });
-  return `${INSTAGRAM_AUTH_URL}?${params.toString()}`;
+  return `https://www.instagram.com/oauth/authorize?${params.toString()}`;
 }
 
-export async function exchangeInstagramCode(code: string) {
+export async function exchangeInstagramCode(code: string, redirectUri?: string) {
   const body = new URLSearchParams({
     client_id: getEnv("INSTAGRAM_CLIENT_ID"),
     client_secret: getEnv("INSTAGRAM_CLIENT_SECRET"),
-    grant_type: "authorization_code",
-    redirect_uri: getEnv("INSTAGRAM_REDIRECT_URI"),
+    redirect_uri: "https://localhost:3001/api/connections/oauth-callback",
     code,
+    grant_type: "authorization_code",
   });
   const res = await fetch(INSTAGRAM_TOKEN_URL, { method: "POST", body });
-  return res.json();
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Instagram token exchange failed (${res.status}): ${text}`);
+  }
+  const data = await res.json();
+
+  if (data.access_token) {
+    const exchangeUrl = `https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${getEnv("INSTAGRAM_CLIENT_SECRET")}&access_token=${data.access_token}`;
+    const exchangeRes = await fetch(exchangeUrl);
+    if (exchangeRes.ok) {
+      const exchangeData = await exchangeRes.json();
+      if (exchangeData.access_token) {
+         data.access_token = exchangeData.access_token;
+         data.expires_in = exchangeData.expires_in || 5184000;
+      }
+    }
+  }
+
+  return data;
 }
 
 export async function fetchInstagramProfile(accessToken: string) {
+  const res = await fetch(`https://graph.instagram.com/me?fields=id,username&access_token=${accessToken}`);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Instagram profile fetch failed (${res.status}): ${text}`);
+  }
+  return res.json();
+}
+
+export function getFacebookOAuthUrl(state: string, redirectUri?: string) {
   const params = new URLSearchParams({
-    fields: "id,username,account_type",
+    client_id: getEnv("FACEBOOK_CLIENT_ID"),
+    redirect_uri: redirectUri ?? getEnv("FACEBOOK_REDIRECT_URI", "http://localhost:3000/api/connections/oauth-callback"),
+    scope: "public_profile,pages_show_list,pages_manage_posts,pages_read_engagement",
+    response_type: "code",
+    state,
+  });
+  return `${FACEBOOK_AUTH_URL}?${params.toString()}`;
+}
+
+export async function exchangeFacebookCode(code: string, redirectUri?: string) {
+  const params = new URLSearchParams({
+    client_id: getEnv("FACEBOOK_CLIENT_ID"),
+    client_secret: getEnv("FACEBOOK_CLIENT_SECRET"),
+    redirect_uri: redirectUri ?? getEnv("FACEBOOK_REDIRECT_URI", "http://localhost:3000/api/connections/oauth-callback"),
+    code,
+  });
+  const res = await fetch(`${FACEBOOK_TOKEN_URL}?${params.toString()}`);
+  return res.json();
+}
+
+export async function fetchFacebookProfile(accessToken: string) {
+  const params = new URLSearchParams({
+    fields: "id,name,accounts{id,name,access_token}",
     access_token: accessToken,
   });
-  const res = await fetch(`${INSTAGRAM_PROFILE_URL}?${params.toString()}`);
+  const res = await fetch(`${FACEBOOK_PROFILE_URL}?${params.toString()}`);
+  return res.json();
+}
+
+export function getThreadsOAuthUrl(state: string, redirectUri?: string) {
+  const params = new URLSearchParams({
+    client_id: getEnv("THREADS_CLIENT_ID"),
+    redirect_uri: redirectUri ?? getEnv("THREADS_REDIRECT_URI", "http://localhost:3000/api/connections/oauth-callback"),
+    scope: "threads_basic,threads_content_publish",
+    response_type: "code",
+    state,
+  });
+  return `${THREADS_AUTH_URL}?${params.toString()}`;
+}
+
+export async function exchangeThreadsCode(code: string, redirectUri?: string) {
+  const clientId = getEnv("THREADS_CLIENT_ID");
+  const clientSecret = getEnv("THREADS_CLIENT_SECRET");
+  const body = new URLSearchParams({
+    client_id: clientId,
+    client_secret: clientSecret,
+    grant_type: "authorization_code",
+    redirect_uri: redirectUri ?? getEnv("THREADS_REDIRECT_URI", "http://localhost:3000/api/connections/oauth-callback"),
+    code,
+  });
+  const res = await fetch(THREADS_TOKEN_URL, { method: "POST", body });
+  const data = await res.json();
+
+  // Exchange for long-lived token
+  if (data.access_token) {
+    const exchangeRes = await fetch(`https://graph.threads.net/access_token?grant_type=th_exchange_token&client_secret=${clientSecret}&access_token=${data.access_token}`);
+    if (exchangeRes.ok) {
+      const exchangeData = await exchangeRes.json();
+      if (exchangeData.access_token) {
+         data.access_token = exchangeData.access_token;
+         data.expires_in = exchangeData.expires_in || (60 * 24 * 60 * 60);
+      }
+    }
+  }
+
+  return data;
+}
+
+export async function fetchThreadsProfile(accessToken: string) {
+  const params = new URLSearchParams({
+    fields: "id,username,name",
+    access_token: accessToken,
+  });
+  const res = await fetch(`${THREADS_PROFILE_URL}?${params.toString()}`);
+  return res.json();
+}
+
+export function generatePKCE() {
+  const codeVerifier = crypto.randomBytes(32).toString("base64url");
+  const codeChallenge = crypto.createHash("sha256").update(codeVerifier).digest("base64url");
+  return { codeVerifier, codeChallenge };
+}
+
+export function getTwitterOAuthUrl(state: string, codeChallenge: string, redirectUri?: string) {
+  const params = new URLSearchParams({
+    response_type: "code",
+    client_id: getEnv("TWITTER_CLIENT_ID"),
+    redirect_uri: redirectUri ?? getEnv("TWITTER_REDIRECT_URI", "http://localhost:3000/api/connections/oauth-callback"),
+    scope: "tweet.read tweet.write users.read offline.access",
+    state,
+    code_challenge: codeChallenge,
+    code_challenge_method: "S256",
+  });
+  return `${TWITTER_AUTH_URL}?${params.toString()}`;
+}
+
+export async function exchangeTwitterCode(code: string, codeVerifier: string, redirectUri?: string) {
+  const clientId = getEnv("TWITTER_CLIENT_ID");
+  const clientSecret = getEnv("TWITTER_CLIENT_SECRET");
+  const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+
+  const body = new URLSearchParams({
+    code,
+    grant_type: "authorization_code",
+    redirect_uri: redirectUri ?? getEnv("TWITTER_REDIRECT_URI", "http://localhost:3000/api/connections/oauth-callback"),
+    code_verifier: codeVerifier,
+  });
+
+  const res = await fetch(TWITTER_TOKEN_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Authorization: `Basic ${basicAuth}`,
+    },
+    body,
+  });
+  return res.json();
+}
+
+export async function fetchTwitterProfile(accessToken: string) {
+  const res = await fetch(TWITTER_PROFILE_URL, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
   return res.json();
 }

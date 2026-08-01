@@ -1,51 +1,29 @@
-"use client";
-
+import { Suspense } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { PLATFORMS } from "@/lib/data";
 import ConnectClient from "./ConnectClient";
-import { auth } from "@/lib/firebase";
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import type { Platform } from "@/types";
+
+// This data is often in a shared file like /lib/data.ts, but is defined here for clarity.
+const PLATFORMS: Platform[] = [
+  { id: 'youtube', name: 'YouTube', icon: '📺', color: 'bg-red-500', connected: false },
+  { id: 'instagram', name: 'Instagram', icon: '📸', color: 'bg-pink-500', connected: false },
+  { id: 'x', name: 'X / Twitter', icon: '🐦', color: 'bg-slate-500', connected: false },
+  { id: 'linkedin', name: 'LinkedIn', icon: '💼', color: 'bg-blue-600', connected: false },
+  { id: 'tiktok', name: 'TikTok', icon: '🎵', color: 'bg-gray-800', connected: false },
+  { id: 'facebook', name: 'Facebook', icon: '👍', color: 'bg-indigo-600', connected: false },
+];
 
 export default function ConnectPage() {
-  const router = useRouter();
-  const [checkingAuth, setCheckingAuth] = useState(true);
-
-  useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((user) => {
-      if (!user) {
-        router.replace("/");
-      } else {
-        setCheckingAuth(false);
-      }
-    });
-
-    return unsubscribe;
-  }, [router]);
-
-  if (checkingAuth) {
-    return null;
-  }
-
   return (
     <div className="page-enter">
       <PageHeader
-        title="Connect Platform"
-        subtitle="Authorize UES Platform to collect your engagement data"
+        title="Connect Platforms"
+        subtitle="Connect your social media and other platforms to start tracking your engagement."
       />
       <div className="px-9 pb-9">
-        <ConnectClient platforms={PLATFORMS} />
-
-        {/* Info card */}
-        <div className="mt-6 p-5 bg-cyan-light/[0.04] border border-cyan-border/20 rounded-2xl flex items-start gap-4">
-          <span className="text-2xl flex-shrink-0 mt-0.5">ℹ️</span>
-          <div>
-            <p className="text-sm font-medium mb-1">How data collection works</p>
-            <p className="text-sm text-mint-700 leading-relaxed">
-              Raw engagement data is fetched via scheduled background jobs and stored unchanged for full traceability. Normalization and UES computation happen in a separate deterministic engine — ensuring scores are always reproducible and auditable.
-            </p>
-          </div>
-        </div>
+        <Suspense fallback={<div className="text-sm text-mint-700">Loading connect options…</div>}>
+          <ConnectClient platforms={PLATFORMS} />
+        </Suspense>
       </div>
     </div>
   );

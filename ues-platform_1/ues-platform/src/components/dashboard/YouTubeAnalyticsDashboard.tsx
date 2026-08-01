@@ -32,6 +32,15 @@ export default function YouTubeAnalyticsDashboard() {
   const [data, setData] = useState<YouTubeAnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [channelName, setChannelName] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("success") === "connected") {
+      setRefreshKey((prev) => prev + 1);
+    }
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -47,17 +56,33 @@ export default function YouTubeAnalyticsDashboard() {
         }
 
         const token = await user.getIdToken();
-        const res = await fetch("/api/connections/youtube/analytics", {
-          headers: { authorization: `Bearer ${token}` },
-        });
+        const [analyticsRes, connectionsRes] = await Promise.all([
+          fetch("/api/connections/youtube/analytics", {
+            headers: { authorization: `Bearer ${token}` },
+          }),
+          fetch("/api/connections", {
+            headers: { authorization: `Bearer ${token}` },
+          }),
+        ]);
 
-        if (!res.ok) {
+        if (!analyticsRes.ok) {
           throw new Error("Unable to load YouTube analytics.");
         }
 
-        const payload = await res.json();
+        const payload = await analyticsRes.json();
+        let nextChannelName: string | null = null;
+
+        if (connectionsRes.ok) {
+          const connections = await connectionsRes.json();
+          const youtubeConnection = Array.isArray(connections)
+            ? connections.find((connection: any) => connection.platformId === "youtube")
+            : null;
+          nextChannelName = youtubeConnection?.accountName || youtubeConnection?.channelTitle || youtubeConnection?.channelId || null;
+        }
+
         if (active) {
           setData(payload);
+          setChannelName(nextChannelName);
           setError(null);
         }
       } catch (err) {
@@ -75,7 +100,7 @@ export default function YouTubeAnalyticsDashboard() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [refreshKey]);
 
   const statCards = useMemo(() => {
     if (!data) return [];
@@ -112,7 +137,7 @@ export default function YouTubeAnalyticsDashboard() {
         <div>
           <CardTitle>YouTube Channel Analytics</CardTitle>
           <CardSubtitle>
-            Last 30 days • {data.period.startDate} → {data.period.endDate}
+            {channelName ? `Connected to ${channelName} • ` : ""}Last 30 days • {data.period.startDate} → {data.period.endDate}
           </CardSubtitle>
         </div>
         <div className="rounded-full border border-cyan-border/30 bg-cyan-light/[0.05] px-3 py-1 text-xs font-semibold text-cyan-ues">

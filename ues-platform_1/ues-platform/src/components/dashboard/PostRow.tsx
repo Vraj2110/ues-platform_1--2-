@@ -5,19 +5,21 @@ import type { Post } from "@/types";
 const platformIcons: Record<string, string> = {
   instagram: "📸",
   youtube: "▶️",
-  twitter: "🐦",
+  x: "🐦",
   linkedin: "💼",
   tiktok: "🎵",
   facebook: "📘",
+  threads: "🧵",
 };
 
 const platformNames: Record<string, string> = {
   instagram: "Instagram",
   youtube: "YouTube",
-  twitter: "X / Twitter",
+  x: "X / Twitter",
   linkedin: "LinkedIn",
   tiktok: "TikTok",
   facebook: "Facebook",
+  threads: "Threads",
 };
 
 const typeVariant: Record<string, "cyan" | "pink" | "teal"> = {
@@ -28,6 +30,7 @@ const typeVariant: Record<string, "cyan" | "pink" | "teal"> = {
   article: "teal",
   story: "teal",
   short: "cyan",
+  post: "teal",
 };
 
 const scoreColor = (score: number) =>
@@ -35,19 +38,65 @@ const scoreColor = (score: number) =>
 
 interface PostRowProps {
   post: Post;
+  onDelete?: (postId: string) => void;
 }
 
-export function PostRow({ post }: PostRowProps) {
+export function PostRow({ post, onDelete }: PostRowProps) {
+  const hasUrl = !!post.url;
+
+  const handleRowClick = () => {
+    if (post.url && typeof window !== "undefined") {
+      window.open(post.url, "_blank", "noopener,noreferrer");
+    }
+  };
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onDelete) {
+      onDelete(post.id);
+    }
+  };
+
   return (
-    <tr className="group border-b border-cyan-border/6 hover:bg-cyan-light/40 transition-colors duration-150">
+    <tr
+      onClick={handleRowClick}
+      className={`group border-b border-cyan-border/6 transition-colors duration-150 ${
+        hasUrl ? "hover:bg-cyan-light/10 cursor-pointer" : "hover:bg-cyan-light/5"
+      }`}
+    >
       <td className="px-4 py-3.5 text-sm">
         <div className="flex items-center gap-2">
           <span className="text-lg">{platformIcons[post.platform]}</span>
-          <span className="text-mint-700">{platformNames[post.platform]}</span>
+          <span className="text-mint-700 font-medium">{platformNames[post.platform]}</span>
         </div>
       </td>
-      <td className="px-4 py-3.5 text-sm max-w-[280px]">
-        <p className="truncate">{post.title}</p>
+      <td className="px-4 py-3.5 text-sm max-w-[340px]">
+        <div className="flex items-center gap-3 truncate">
+          {post.thumbnailUrl ? (
+            <img
+              src={post.thumbnailUrl}
+              alt={post.title}
+              className="w-10 h-7 object-cover rounded border border-cyan-border/20 flex-shrink-0"
+              onError={(e) => {
+                (e.target as HTMLElement).style.display = "none";
+              }}
+            />
+          ) : null}
+          {hasUrl ? (
+            <a
+              href={post.url}
+              target="_blank"
+              rel="noreferrer"
+              className="font-medium text-[var(--color-mint)] group-hover:text-cyan-ues hover:underline flex items-center gap-1.5 truncate"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <span className="truncate">{post.title}</span>
+              <span className="text-xs text-cyan-ues opacity-70 group-hover:opacity-100 flex-shrink-0">↗</span>
+            </a>
+          ) : (
+            <p className="truncate text-[var(--color-mint)]">{post.title}</p>
+          )}
+        </div>
       </td>
       <td className="px-4 py-3.5 text-sm text-mint-700">{post.publishedAt}</td>
       <td className="px-4 py-3.5">
@@ -55,7 +104,7 @@ export function PostRow({ post }: PostRowProps) {
           {post.type.charAt(0).toUpperCase() + post.type.slice(1)}
         </Badge>
       </td>
-      <td className="px-4 py-3.5 text-sm text-mint-700">
+      <td className="px-4 py-3.5 text-sm text-cyan-ues font-semibold">
         {formatNumber(post.metrics.views)}
       </td>
       <td className="px-4 py-3.5">
@@ -66,10 +115,19 @@ export function PostRow({ post }: PostRowProps) {
           {post.uesScore}
         </span>
       </td>
-      <td className="px-4 py-3.5">
+      <td className="px-4 py-3.5 flex items-center justify-between gap-2">
         <Badge variant={post.status === "active" ? "cyan" : "teal"}>
           {post.status.charAt(0).toUpperCase() + post.status.slice(1)}
         </Badge>
+        {onDelete ? (
+          <button
+            onClick={handleDelete}
+            title="Remove content"
+            className="opacity-0 group-hover:opacity-100 p-1 text-xs text-pink-ues hover:bg-pink-ues/10 rounded transition-opacity"
+          >
+            🗑️
+          </button>
+        ) : null}
       </td>
     </tr>
   );

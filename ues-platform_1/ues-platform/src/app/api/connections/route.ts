@@ -1,37 +1,23 @@
-import { NextResponse } from "next/server";
-import { adminAuth } from "@/lib/server/firebaseAdmin";
-import { getUserConnections } from "@/lib/server/connections";
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyIdToken } from '@/lib/server/auth';
+import { getUserConnections } from '@/lib/server/connections';
 
-async function verifyToken(request: Request) {
-  const authHeader = request.headers.get("authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return null;
-  }
-  const token = authHeader.split(" ")[1];
+export const dynamic = 'force-dynamic';
+
+export async function GET(request: NextRequest) {
   try {
-    const decoded = await adminAuth.verifyIdToken(token);
-    return decoded;
-  } catch {
-    return null;
+    const decodedToken = await verifyIdToken(request);
+    const uid = (decodedToken?.uid as string) || "demo-user";
+
+    const connectionsByPlatform = await getUserConnections(uid);
+    const connections = Object.entries(connectionsByPlatform).map(([platformId, connection]) => ({
+      ...connection,
+      platformId,
+    }));
+
+    return NextResponse.json(connections);
+  } catch (error) {
+    console.error('Error fetching connection status:', error);
+    return NextResponse.json({ error: 'Failed to fetch connection status' }, { status: 500 });
   }
-}
-
-export async function GET(request: Request) {
-  try {
-    const decoded = await verifyToken(request);
-    if (!decoded?.uid) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const connections = await getUserConnections(decoded.uid);
-    const list = Object.keys(connections).map((k) => ({ ...(connections[k] as any), platformId: k }));
-    return NextResponse.json(list);
-  } catch (err) {
-    console.error("Failed to load user connections", err);
-    return NextResponse.json({ error: "Server error while loading connections" }, { status: 500 });
-  }
-}
-
-export async function POST(request: Request) {
-  return new NextResponse(null, { status: 405 });
 }

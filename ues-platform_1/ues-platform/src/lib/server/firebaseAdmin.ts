@@ -4,7 +4,6 @@ import { getApps } from "firebase-admin/app";
 function normalizeEnv(value?: string) {
   if (!value) return undefined;
   const trimmed = value.trim();
-  // Remove surrounding single or double quotes without using the `s` flag
   const withoutDouble = trimmed.match(/^"([\s\S]*)"$/);
   if (withoutDouble) return withoutDouble[1];
   const withoutSingle = trimmed.match(/^'([\s\S]*)'$/);
@@ -12,28 +11,32 @@ function normalizeEnv(value?: string) {
   return trimmed;
 }
 
-const projectId = normalizeEnv(process.env.FIREBASE_ADMIN_PROJECT_ID);
-const clientEmail = normalizeEnv(process.env.FIREBASE_ADMIN_CLIENT_EMAIL);
-const privateKeyRaw = normalizeEnv(process.env.FIREBASE_ADMIN_PRIVATE_KEY);
+const projectId = normalizeEnv(process.env.FIREBASE_ADMIN_PROJECT_ID ?? process.env.FIREBASE_PROJECT_ID);
+const clientEmail = normalizeEnv(process.env.FIREBASE_ADMIN_CLIENT_EMAIL ?? process.env.FIREBASE_CLIENT_EMAIL);
+const privateKeyRaw = normalizeEnv(process.env.FIREBASE_ADMIN_PRIVATE_KEY ?? process.env.FIREBASE_PRIVATE_KEY);
 const privateKey = privateKeyRaw?.replace(/\\n/g, "\n");
 
 function missingError() {
   return new Error(
-    "Missing Firebase Admin credentials in environment variables. Set FIREBASE_ADMIN_PROJECT_ID, FIREBASE_ADMIN_CLIENT_EMAIL, and FIREBASE_ADMIN_PRIVATE_KEY."
+    "Missing Firebase Admin credentials in environment variables. Set FIREBASE_ADMIN_PROJECT_ID/FIREBASE_ADMIN_CLIENT_EMAIL/FIREBASE_ADMIN_PRIVATE_KEY or FIREBASE_PROJECT_ID/FIREBASE_CLIENT_EMAIL/FIREBASE_PRIVATE_KEY."
   );
 }
 
 let app: admin.app.App | null = null;
 if (projectId && clientEmail && privateKey) {
-  app = !getApps().length
-    ? admin.initializeApp({
-        credential: admin.credential.cert({
-          projectId,
-          clientEmail,
-          privateKey,
-        }),
-      })
-    : admin.app();
+  try {
+    app = !getApps().length
+      ? admin.initializeApp({
+          credential: admin.credential.cert({
+            projectId,
+            clientEmail,
+            privateKey,
+          }),
+        })
+      : admin.app();
+  } catch (error) {
+    console.warn("Firebase Admin initialization failed, falling back to proxy auth objects:", error);
+  }
 }
 
 function makeMissingProxy(name: string) {
@@ -50,5 +53,6 @@ function makeMissingProxy(name: string) {
   );
 }
 
+export const isFirebaseAdminConfigured = Boolean(app);
 export const adminAuth: any = app ? app.auth() : makeMissingProxy("adminAuth");
 export const adminDb: any = app ? app.firestore() : makeMissingProxy("adminDb");

@@ -15,7 +15,7 @@ import type {
 export const PLATFORMS: Platform[] = [
   { id: "instagram", name: "Instagram", icon: "📸", color: "#FF6B6B", connected: true, uesScore: 82 },
   { id: "youtube", name: "YouTube", icon: "▶️", color: "#4ECDC4", connected: true, uesScore: 91 },
-  { id: "twitter", name: "X / Twitter", icon: "🐦", color: "#F7FFF7", connected: true, uesScore: 74 },
+  { id: "x", name: "X / Twitter", icon: "🐦", color: "#F7FFF7", connected: true, uesScore: 74 },
   { id: "linkedin", name: "LinkedIn", icon: "💼", color: "#4ECDC4", connected: true, uesScore: 88 },
   { id: "tiktok", name: "TikTok", icon: "🎵", color: "#FF6B6B", connected: false },
   { id: "facebook", name: "Facebook", icon: "📘", color: "#4ECDC4", connected: false },
@@ -48,13 +48,23 @@ export const POSTS: Post[] = [
   },
   {
     id: "p3",
-    platform: "twitter",
+    platform: "x",
     title: "Hot take: engagement rate is a useless metric",
     type: "thread",
     status: "active",
     metrics: { likes: 2140, comments: 384, shares: 641, views: 89400, saves: 312, followerCount: 12600 },
     uesScore: 74,
     publishedAt: "2024-03-10",
+  },
+  {
+    id: "p_fb1",
+    platform: "facebook",
+    title: "Company update: New features rolling out!",
+    type: "post",
+    status: "active",
+    metrics: { likes: 1250, comments: 145, shares: 320, views: 24500, saves: 40, followerCount: 45000 },
+    uesScore: 78,
+    publishedAt: "2024-03-09",
   },
   {
     id: "p4",
@@ -102,10 +112,11 @@ export const UES_SCORE: UESScore = {
   platformBreakdown: {
     instagram: 82,
     youtube: 91,
-    twitter: 74,
+    x: 74,
     linkedin: 88,
     tiktok: 0,
     facebook: 0,
+    threads: 0,
   },
   trend: 6.4,
 };
@@ -123,20 +134,20 @@ export const METRIC_WEIGHTS: MetricWeight[] = [
 // ─── Time Series ───────────────────────────────────────────────────────────
 
 export const TIME_SERIES: TimeSeriesDataPoint[] = [
-  { date: "Mar 1", ues: 76, instagram: 72, youtube: 80, twitter: 68, linkedin: 78 },
-  { date: "Mar 2", ues: 74, instagram: 70, youtube: 78, twitter: 65, linkedin: 76 },
-  { date: "Mar 3", ues: 79, instagram: 75, youtube: 84, twitter: 70, linkedin: 80 },
-  { date: "Mar 4", ues: 77, instagram: 73, youtube: 82, twitter: 67, linkedin: 79 },
-  { date: "Mar 5", ues: 82, instagram: 78, youtube: 90, twitter: 72, linkedin: 83 },
-  { date: "Mar 6", ues: 80, instagram: 76, youtube: 88, twitter: 70, linkedin: 82 },
-  { date: "Mar 7", ues: 78, instagram: 74, youtube: 85, twitter: 68, linkedin: 80 },
-  { date: "Mar 8", ues: 81, instagram: 77, youtube: 87, twitter: 71, linkedin: 82 },
-  { date: "Mar 9", ues: 83, instagram: 79, youtube: 89, twitter: 73, linkedin: 84 },
-  { date: "Mar 10", ues: 80, instagram: 76, youtube: 86, twitter: 70, linkedin: 81 },
-  { date: "Mar 11", ues: 85, instagram: 80, youtube: 92, twitter: 74, linkedin: 86 },
-  { date: "Mar 12", ues: 83, instagram: 78, youtube: 90, twitter: 72, linkedin: 84 },
-  { date: "Mar 13", ues: 87, instagram: 82, youtube: 93, twitter: 76, linkedin: 88 },
-  { date: "Mar 14", ues: 84, instagram: 80, youtube: 91, twitter: 74, linkedin: 85 },
+  { date: "Mar 1", ues: 76, instagram: 72, youtube: 80, x: 68, linkedin: 78 },
+  { date: "Mar 2", ues: 74, instagram: 70, youtube: 78, x: 65, linkedin: 76 },
+  { date: "Mar 3", ues: 79, instagram: 75, youtube: 84, x: 70, linkedin: 80 },
+  { date: "Mar 4", ues: 77, instagram: 73, youtube: 82, x: 67, linkedin: 79 },
+  { date: "Mar 5", ues: 82, instagram: 78, youtube: 90, x: 72, linkedin: 83 },
+  { date: "Mar 6", ues: 80, instagram: 76, youtube: 88, x: 70, linkedin: 82 },
+  { date: "Mar 7", ues: 78, instagram: 74, youtube: 85, x: 68, linkedin: 80 },
+  { date: "Mar 8", ues: 81, instagram: 77, youtube: 87, x: 71, linkedin: 82 },
+  { date: "Mar 9", ues: 83, instagram: 79, youtube: 89, x: 73, linkedin: 84 },
+  { date: "Mar 10", ues: 80, instagram: 76, youtube: 86, x: 70, linkedin: 81 },
+  { date: "Mar 11", ues: 85, instagram: 80, youtube: 92, x: 74, linkedin: 86 },
+  { date: "Mar 12", ues: 83, instagram: 78, youtube: 90, x: 72, linkedin: 84 },
+  { date: "Mar 13", ues: 87, instagram: 82, youtube: 93, x: 76, linkedin: 88 },
+  { date: "Mar 14", ues: 84, instagram: 80, youtube: 91, x: 74, linkedin: 85 },
 ];
 
 // ─── Platform Distribution ─────────────────────────────────────────────────

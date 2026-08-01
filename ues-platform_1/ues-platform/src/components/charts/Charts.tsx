@@ -67,9 +67,9 @@ export function PlatformTrendChart() {
         <YAxis domain={[55, 100]} tickLine={false} axisLine={false} />
         <Tooltip />
         <Area type="monotone" dataKey="instagram" stroke="#FF6B6B" strokeWidth={2} fill="url(#igGrad)" dot={false} name="Instagram" />
-        <Area type="monotone" dataKey="youtube" stroke="#4ECDC4" strokeWidth={2} fill="url(#ytGrad)" dot={false} name="YouTube" />
-        <Area type="monotone" dataKey="twitter" stroke="rgba(247,255,247,0.5)" strokeWidth={1.5} fill="none" dot={false} name="X / Twitter" />
-        <Area type="monotone" dataKey="linkedin" stroke="rgba(78,205,196,0.5)" strokeWidth={1.5} fill="none" dot={false} name="LinkedIn" />
+        <Area type="monotone" dataKey="youtube" stroke="#4ECDC4" strokeWidth={1.5} fill="none" dot={false} name="YouTube" />
+        <Area type="monotone" dataKey="x" stroke="rgba(247,255,247,0.5)" strokeWidth={1.5} fill="none" dot={false} name="X / Twitter" />
+        <Area type="monotone" dataKey="linkedin" stroke="rgba(78,205,196,0.6)" strokeWidth={1.5} fill="none" dot={false} name="LinkedIn" />
       </AreaChart>
     </ResponsiveContainer>
   );

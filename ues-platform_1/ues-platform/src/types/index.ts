@@ -3,10 +3,11 @@
 export type PlatformId =
   | "instagram"
   | "youtube"
-  | "twitter"
+  | "x"
   | "linkedin"
   | "tiktok"
-  | "facebook";
+  | "facebook"
+  | "threads";
 
 export interface Platform {
   id: PlatformId;
@@ -26,7 +27,8 @@ export type PostType =
   | "video"
   | "thread"
   | "article"
-  | "short";
+  | "short"
+  | "post";
 
 export type PostStatus = "active" | "archived" | "draft";
 
@@ -44,8 +46,10 @@ export interface Post {
   platform: PlatformId;
   title: string;
   url?: string;
+  thumbnailUrl?: string;
   type: PostType;
   status: PostStatus;
+  privacyStatus?: string;
   metrics: PostMetrics;
   uesScore: number;
   publishedAt: string;
@@ -81,8 +85,10 @@ export interface TimeSeriesDataPoint {
   ues: number;
   instagram?: number;
   youtube?: number;
-  twitter?: number;
+  x?: number;
   linkedin?: number;
+  facebook?: number;
+  threads?: number;
 }
 
 export interface PlatformDistribution {
