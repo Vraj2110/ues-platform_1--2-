@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardTitle, CardSubtitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -12,16 +11,23 @@ import YouTubeAnalyticsDashboard from "@/components/dashboard/YouTubeAnalyticsDa
 import { TopPostsWidget } from "@/components/dashboard/TopPostsWidget";
 import { PLATFORM_DISTRIBUTION } from "@/lib/data";
 
+import { GlobalOverviewWidget } from "@/components/dashboard/GlobalOverviewWidget";
+import { PlatformPerformanceCards } from "@/components/dashboard/PlatformPerformanceCards";
+import { PerformanceScoreWidget } from "@/components/dashboard/PerformanceScoreWidget";
+import { CrossPlatformComparison } from "@/components/dashboard/CrossPlatformComparison";
+import { AIPostAnalysisWidget } from "@/components/dashboard/AIPostAnalysisWidget";
+import { AIInsightsSection } from "@/components/dashboard/AIInsightsSection";
+
 export const metadata: Metadata = { title: "Analytics" };
 
-const TABS = ["Overview", "Trends", "Comparison", "Benchmark"];
+const TABS = ["Overview", "AI Analysis", "Trends", "Comparison", "Benchmark"];
 
 export default function AnalyticsPage() {
   return (
     <div className="page-enter">
       <PageHeader
-        title="Analytics"
-        subtitle="Deep-dive into your cross-platform performance"
+        title="Analytics & AI Insights"
+        subtitle="Deep-dive into your cross-platform performance with AI analysis"
         action={
           <Button variant="ghost" size="sm">
             ⬇ Export Report
@@ -29,7 +35,7 @@ export default function AnalyticsPage() {
         }
       />
 
-      <div className="px-9 pb-9 space-y-5">
+      <div className="px-9 pb-9 space-y-8">
         {/* Tab bar */}
         <div className="flex gap-1 bg-teal-surface rounded-xl p-1 w-fit">
           {TABS.map((tab, i) => (
@@ -46,31 +52,42 @@ export default function AnalyticsPage() {
           ))}
         </div>
 
+        {/* 1. Global Analytics Overview */}
+        <section>
+          <GlobalOverviewWidget />
+        </section>
+
+        {/* Score & Cross-Platform Comparison */}
+        <section className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <div className="lg:col-span-1">
+            <PerformanceScoreWidget />
+          </div>
+          <div className="lg:col-span-2">
+            <CrossPlatformComparison />
+          </div>
+        </section>
+
+        {/* 2. Platform Performance Cards */}
+        <section>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-display font-bold text-[var(--color-mint)]">Platform Breakdown</h3>
+          </div>
+          <PlatformPerformanceCards />
+        </section>
+
+        {/* 3. AI Analysis & Insights */}
+        <section className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+          <AIPostAnalysisWidget />
+          <AIInsightsSection />
+        </section>
+
+        <hr className="border-cyan-border/20" />
+
+        {/* Legacy YouTube Dashboard Section (If applicable) */}
         <YouTubeAnalyticsDashboard />
 
-        {/* Top stats strip */}
-        <div className="grid grid-cols-4 gap-4">
-          {[
-            { label: "Posts this month", value: "14", change: "↑ 3", color: "text-cyan-ues" },
-            { label: "Avg UES this month", value: "84.2", change: "↑ 6.4%", color: "text-cyan-ues" },
-            { label: "Best platform", value: "YouTube", change: "Score: 91", color: "text-cyan-ues" },
-            { label: "Most posts", value: "Instagram", change: "38% of total", color: "text-pink-ues" },
-          ].map((s) => (
-            <div
-              key={s.label}
-              className="bg-teal-card border border-cyan-border/12 rounded-2xl px-5 py-4"
-            >
-              <p className="text-[10px] uppercase tracking-widest text-mint-700 font-semibold mb-2">
-                {s.label}
-              </p>
-              <p className="font-display font-extrabold text-2xl leading-none">{s.value}</p>
-              <p className={`text-xs mt-1.5 font-medium ${s.color}`}>{s.change}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* Charts row 1 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Legacy Charts Row 1 */}
+        <section className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <Card>
             <CardTitle>Platform Engagement Trends</CardTitle>
             <CardSubtitle>Daily UES per platform · Last 14 days</CardSubtitle>
@@ -120,10 +137,10 @@ export default function AnalyticsPage() {
               </div>
             </div>
           </Card>
-        </div>
+        </section>
 
-        {/* Charts row 2 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Legacy Charts Row 2 */}
+        <section className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <Card>
             <CardTitle>Score Distribution</CardTitle>
             <CardSubtitle>Posts by UES band · All time</CardSubtitle>
@@ -133,7 +150,7 @@ export default function AnalyticsPage() {
           </Card>
 
           <TopPostsWidget />
-        </div>
+        </section>
       </div>
     </div>
   );

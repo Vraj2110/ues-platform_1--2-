@@ -149,3 +149,35 @@ export function PlatformBarChart() {
     </ResponsiveContainer>
   );
 }
+
+// ─── Gauge Chart ──────────────────────────────────────────────────────────
+
+export function UESGaugeChart({ score }: { score: number }) {
+  const data = [
+    { name: "Score", value: score, fill: "#4ECDC4" },
+    { name: "Remaining", value: 100 - score, fill: "rgba(78,205,196,0.15)" },
+  ];
+
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <PieChart>
+        <Pie
+          data={data}
+          cx="50%"
+          cy="70%"
+          startAngle={180}
+          endAngle={0}
+          innerRadius="75%"
+          outerRadius="100%"
+          paddingAngle={0}
+          dataKey="value"
+          stroke="none"
+        >
+          {data.map((entry, index) => (
+            <Cell key={`cell-${index}`} fill={entry.fill} />
+          ))}
+        </Pie>
+      </PieChart>
+    </ResponsiveContainer>
+  );
+}

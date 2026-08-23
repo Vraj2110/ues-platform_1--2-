@@ -8,7 +8,7 @@ import { Card, CardTitle, CardSubtitle } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { auth, storage } from "@/lib/firebase";
-import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 const PLATFORM_OPTIONS = [
   { value: "youtube", label: "YouTube ▶️", description: "Upload videos directly to YouTube" },
@@ -163,36 +163,68 @@ export default function AddPostPage() {
            const fileToUpload = videoFile || thumbnailFile;
            mediaType = videoFile ? "video" : "image";
            setUploadProgress(20);
-           const fileName = `${Date.now()}_${fileToUpload?.name}`;
-           const storageRef = ref(storage, `uploads/${user?.uid || 'guest'}/${fileName}`);
-           
-           await new Promise<void>((resolve, reject) => {
-             const uploadTask = uploadBytesResumable(storageRef, fileToUpload as File);
-             uploadTask.on('state_changed', 
-               (snapshot) => {
-                 const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 50;
-                 setUploadProgress(20 + Math.round(progress));
-               },
-               (err) => reject(err),
-               async () => {
-                 mediaUrl = await getDownloadURL(uploadTask.snapshot.ref);
-                 resolve();
-               }
-             );
-           });
+           try {
+             // Firebase Storage is hanging due to missing bucket/CORS config, using tmpfiles.org as a reliable public URL generator
+             const formData = new FormData();
+             formData.append("file", fileToUpload as File);
+             const fallbackRes = await fetch("https://tmpfiles.org/api/v1/upload", {
+               method: "POST",
+               body: formData
+             });
+             
+             if (!fallbackRes.ok) {
+               throw new Error("Temporary storage upload failed");
+             }
+             
+             const fallbackData = await fallbackRes.json();
+             // Convert to direct download link required by Instagram/Facebook
+             mediaUrl = fallbackData.data.url.replace("tmpfiles.org/", "tmpfiles.org/dl/");
+             setUploadProgress(70);
+           } catch (err: any) {
+             console.error("Upload Error:", err);
+             throw new Error("Failed to upload media. Details: " + (err.message || err));
+           }
            setUploadProgress(75);
         }
       }
 
       setUploadProgress(80);
 
-      const res = await fetch("/api/posts/create", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
+      let reqBody: any;
+      let headers: Record<string, string> = {};
+      if (token) headers.authorization = `Bearer ${token}`;
+
+      let endpoint = "/api/posts/create";
+
+      if (platform === "instagram") {
+        endpoint = "/api/instagram/publish";
+        headers["Content-Type"] = "application/json";
+        
+        // Build caption from title and description
+        const combinedCaption = description ? `${title.trim()}\n\n${description}`.trim() : title.trim();
+        
+        reqBody = JSON.stringify({
+          caption: combinedCaption,
+          imageUrl: mediaType === "image" ? (mediaUrl || thumbnailPreviewUrl) : undefined,
+          videoUrl: mediaType === "video" ? mediaUrl : undefined,
+          connectionId: "instagram",
+        });
+      } else if (isYouTube && videoFile) {
+        const formData = new FormData();
+        formData.append("platform", platform);
+        formData.append("type", type);
+        formData.append("title", title);
+        formData.append("description", description);
+        formData.append("privacyStatus", privacyStatus);
+        formData.append("category", category);
+        formData.append("tags", tags);
+        formData.append("publishedAt", publishedAt);
+        formData.append("videoFile", videoFile);
+        if (thumbnailPreviewUrl) formData.append("thumbnailUrl", thumbnailPreviewUrl);
+        reqBody = formData;
+      } else {
+        headers["Content-Type"] = "application/json";
+        reqBody = JSON.stringify({
           platform,
           type: isYouTube ? type : (mediaType === "video" ? "video" : "post"),
           title,
@@ -202,11 +234,17 @@ export default function AddPostPage() {
           tags,
           fileName: videoFile?.name || undefined,
           fileSize: videoFile?.size ? `${(videoFile.size / (1024 * 1024)).toFixed(1)} MB` : undefined,
-          thumbnailUrl: thumbnailPreviewUrl || undefined,
+          thumbnailUrl: undefined,
           mediaUrl,
           mediaType,
           publishedAt,
-        }),
+        });
+      }
+
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers,
+        body: reqBody,
       });
 
       setUploadProgress(90);
@@ -225,8 +263,8 @@ export default function AddPostPage() {
 
       const data = await res.json();
 
-      // YouTube: handle resumable upload of video binary
-      if (data.resumableUrl && videoFile) {
+      // Fallback YouTube client resumable upload if server returned resumableUrl without full direct upload
+      if (data.resumableUrl && videoFile && data.videoId?.startsWith("yt-")) {
         setUploadProgress(85);
         try {
           const videoUploadRes = await fetch(data.resumableUrl, {
@@ -245,21 +283,11 @@ export default function AddPostPage() {
                   data.post.id = uploadedData.id;
                   data.post.url = `https://www.youtube.com/watch?v=${uploadedData.id}`;
                 }
-                try {
-                  await fetch("/api/posts/confirm-upload", {
-                    method: "POST",
-                    headers: {
-                      "Content-Type": "application/json",
-                      ...(token ? { authorization: `Bearer ${token}` } : {}),
-                    },
-                    body: JSON.stringify({ oldId, newId: uploadedData.id }),
-                  });
-                } catch (e) {}
               }
             } catch {}
           }
         } catch (uploadErr) {
-          console.warn("Video upload notice:", uploadErr);
+          console.warn("Client video upload notice:", uploadErr);
         }
       }
 

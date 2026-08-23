@@ -48,3 +48,11 @@ export function CardSubtitle({ className, children, ...props }: HTMLAttributes<H
     </p>
   );
 }
+
+export function CardContent({ className, children, ...props }: HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div className={cn("", className)} {...props}>
+      {children}
+    </div>
+  );
+}

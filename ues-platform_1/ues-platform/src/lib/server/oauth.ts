@@ -45,6 +45,12 @@ export function isGoogleOAuthConfigured() {
   }
 }
 
+export function isFacebookOAuthConfigured() {
+  const clientId = process.env.FACEBOOK_CLIENT_ID;
+  const secret = process.env.FACEBOOK_CLIENT_SECRET;
+  return Boolean(clientId && secret && !clientId.includes("YOUR_") && !secret.includes("YOUR_"));
+}
+
 export function getMockYouTubeVideos() {
   return {
     videos: [
@@ -153,8 +159,10 @@ export async function createOAuthState(uid: string, platform: string, codeVerifi
     uid,
     platform,
     createdAt: Date.now(),
-    codeVerifier,
   };
+  if (codeVerifier) {
+    payload.codeVerifier = codeVerifier;
+  }
   const state = Buffer.from(JSON.stringify(payload)).toString("base64url");
   await saveOAuthState(state, payload);
   return state;
@@ -386,13 +394,25 @@ export async function fetchYouTubeRecentVideos(accessToken: string, refreshToken
 
 export async function fetchTwitterRecentTweets(accessToken: string, maxResults = 20) {
   // Get the authenticated user's ID first
-  const userRes = await fetch("https://api.twitter.com/2/users/me", {
+  const userRes = await fetch("https://api.twitter.com/2/users/me?user.fields=public_metrics", {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  if (!userRes.ok) throw new Error(`Twitter user lookup failed (${userRes.status})`);
+  if (!userRes.ok) {
+    if (userRes.status === 402 || userRes.status === 403 || userRes.status === 429) {
+      return [{
+        id: "mock-tweet-1",
+        text: "X API limit reached (Payment Required). Please upgrade your X Developer account.",
+        thumbnailUrl: null,
+        publishedAt: new Date().toISOString(),
+        likes: 0, retweets: 0, replies: 0, views: 0, quotes: 0,
+      }];
+    }
+    throw new Error(`Twitter user lookup failed (${userRes.status})`);
+  }
   const userData = await userRes.json();
   const userId = userData?.data?.id;
   if (!userId) throw new Error("Twitter user ID not found");
+  const followerCount = userData?.data?.public_metrics?.followers_count || 0;
 
   const params = new URLSearchParams({
     max_results: String(Math.min(maxResults, 100)),
@@ -408,6 +428,15 @@ export async function fetchTwitterRecentTweets(accessToken: string, maxResults =
   );
 
   if (!tweetsRes.ok) {
+    if (tweetsRes.status === 402 || tweetsRes.status === 403 || tweetsRes.status === 429) {
+      return [{
+        id: "mock-tweet-1",
+        text: "X API limit reached (Payment Required). Please upgrade your X Developer account.",
+        thumbnailUrl: null,
+        publishedAt: new Date().toISOString(),
+        likes: 0, retweets: 0, replies: 0, views: 0, quotes: 0,
+      }];
+    }
     const text = await tweetsRes.text();
     throw new Error(`Twitter tweets fetch failed (${tweetsRes.status}): ${text}`);
   }
@@ -433,6 +462,7 @@ export async function fetchTwitterRecentTweets(accessToken: string, maxResults =
       replies: Number(metrics.reply_count || 0),
       views: Number(metrics.impression_count || 0),
       quotes: Number(metrics.quote_count || 0),
+      followerCount,
     };
   });
 }
@@ -440,6 +470,13 @@ export async function fetchTwitterRecentTweets(accessToken: string, maxResults =
 // ─── Instagram ───────────────────────────────────────────────────────────────
 
 export async function fetchInstagramRecentMedia(accountId: string, accessToken: string, limit = 20) {
+  const userRes = await fetch(`https://graph.instagram.com/v20.0/${accountId}?fields=followers_count&access_token=${accessToken}`);
+  let followerCount = 0;
+  if (userRes.ok) {
+    const userData = await userRes.json();
+    followerCount = userData?.followers_count || 0;
+  }
+
   const params = new URLSearchParams({
     fields: "id,caption,media_type,media_url,thumbnail_url,timestamp,like_count,comments_count,permalink",
     limit: String(limit),
@@ -463,6 +500,7 @@ export async function fetchInstagramRecentMedia(accountId: string, accessToken: 
     publishedAt: item.timestamp || new Date().toISOString(),
     likes: Number(item.like_count || 0),
     comments: Number(item.comments_count || 0),
+    followerCount,
   }));
 }
 
@@ -470,10 +508,10 @@ export async function fetchInstagramRecentMedia(accountId: string, accessToken: 
 
 export async function fetchFacebookRecentPosts(accessToken: string, limit = 20) {
   const pagesRes = await fetch(
-    `https://graph.facebook.com/v19.0/me/accounts?access_token=${accessToken}`
+    `https://graph.facebook.com/v19.0/me/accounts?access_token=${accessToken}&fields=id,access_token,followers_count,fan_count`
   );
   
-  let pages = [{ id: "me", access_token: accessToken }];
+  let pages: any[] = [{ id: "me", access_token: accessToken, followers_count: 0, fan_count: 0 }];
 
   if (pagesRes.ok) {
     const pagesData = await pagesRes.json();
@@ -495,7 +533,8 @@ export async function fetchFacebookRecentPosts(accessToken: string, limit = 20) 
     if (postsRes.ok) {
       const data = await postsRes.json();
       if (Array.isArray(data?.data) && data.data.length > 0) {
-        allItems.push(...data.data);
+        const postsWithFollowers = data.data.map((p: any) => ({ ...p, followerCount: page.followers_count || page.fan_count || 0 }));
+        allItems.push(...postsWithFollowers);
         continue;
       }
     }
@@ -506,7 +545,8 @@ export async function fetchFacebookRecentPosts(accessToken: string, limit = 20) 
       if (feedRes.ok) {
         const feedData = await feedRes.json();
         if (Array.isArray(feedData?.data)) {
-          allItems.push(...feedData.data);
+          const feedWithFollowers = feedData.data.map((p: any) => ({ ...p, followerCount: page.followers_count || page.fan_count || 0 }));
+          allItems.push(...feedWithFollowers);
         }
       } else {
         console.warn(`[Facebook] Failed to fetch personal feed: ${feedRes.status}`);
@@ -522,6 +562,7 @@ export async function fetchFacebookRecentPosts(accessToken: string, limit = 20) 
     likes: Number(item.reactions?.summary?.total_count || 0),
     comments: Number(item.comments?.summary?.total_count || 0),
     shares: Number(item.shares?.count || 0),
+    followerCount: item.followerCount || 0,
   }));
 }
 
@@ -574,6 +615,13 @@ export async function fetchLinkedInRecentPosts(accessToken: string) {
 // ─── Threads ─────────────────────────────────────────────────────────────────
 
 export async function fetchThreadsRecentPosts(accessToken: string, limit = 20) {
+  const userRes = await fetch(`https://graph.threads.net/v1.0/me?fields=followers_count&access_token=${accessToken}`);
+  let followerCount = 0;
+  if (userRes.ok) {
+    const userData = await userRes.json();
+    followerCount = userData?.followers_count || 0;
+  }
+
   const params = new URLSearchParams({
     fields: "id,text,media_type,media_url,thumbnail_url,timestamp,shortcode,permalink",
     limit: String(limit),
@@ -597,6 +645,7 @@ export async function fetchThreadsRecentPosts(accessToken: string, limit = 20) {
     publishedAt: item.timestamp || new Date().toISOString(),
     likes: 0,
     replies: 0,
+    followerCount,
   }));
 }
 
@@ -632,7 +681,7 @@ function normalizeYouTubeAnalytics(data: any, startDate: string, endDate: string
 export function getInstagramOAuthUrl(state: string, redirectUri?: string) {
   const params = new URLSearchParams({
     client_id: getEnv("INSTAGRAM_CLIENT_ID"),
-    redirect_uri: "https://localhost:3001/api/connections/oauth-callback",
+    redirect_uri: redirectUri ?? getEnv("INSTAGRAM_REDIRECT_URI", "http://localhost:3000/api/connections/oauth-callback"),
     scope: "instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments,instagram_business_content_publish,instagram_business_manage_insights",
     response_type: "code",
     force_reauth: "true",
@@ -645,7 +694,7 @@ export async function exchangeInstagramCode(code: string, redirectUri?: string) 
   const body = new URLSearchParams({
     client_id: getEnv("INSTAGRAM_CLIENT_ID"),
     client_secret: getEnv("INSTAGRAM_CLIENT_SECRET"),
-    redirect_uri: "https://localhost:3001/api/connections/oauth-callback",
+    redirect_uri: redirectUri ?? getEnv("INSTAGRAM_REDIRECT_URI", "http://localhost:3000/api/connections/oauth-callback"),
     code,
     grant_type: "authorization_code",
   });

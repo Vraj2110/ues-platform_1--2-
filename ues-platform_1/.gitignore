@@ -1,0 +1,15 @@
+# dependencies
+node_modules/
+
+# local env files
+.env
+.env*.local
+
+# next.js
+.next/
+out/
+
+# misc & security
+.DS_Store
+*.pem
+.connections_store.json

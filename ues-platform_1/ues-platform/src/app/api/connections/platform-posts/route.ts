@@ -210,7 +210,7 @@ export async function GET(request: Request) {
                       shares: (tweet.retweets || 0) + (tweet.quotes || 0),
                       views: tweet.views || 0,
                       saves: 0,
-                      followerCount: 0,
+                      followerCount: tweet.followerCount || 0,
                     },
                     uesScore: computeUES(tweet.views || 0, tweet.likes || 0, tweet.replies || 0, tweet.retweets || 0),
                     publishedAt: tweet.publishedAt
@@ -250,7 +250,7 @@ export async function GET(request: Request) {
                       shares: 0,
                       views: item.likes * 10,
                       saves: 0,
-                      followerCount: 0,
+                      followerCount: item.followerCount || 0,
                     },
                     uesScore: computeUES(item.likes * 10, item.likes, item.comments),
                     publishedAt: item.publishedAt
@@ -272,8 +272,9 @@ export async function GET(request: Request) {
                 fetched = true;
                 
                 fbPosts.forEach((item: any) => {
+                  const viewEstimate = (item.likes || 0) * 8 + (item.shares || 0) * 15;
                   posts.push({
-                    id: item.id ? (item.id.startsWith("fb-live-") ? item.id : `fb-live-${item.id}`) : `fb-live-${Date.now()}-${Math.random()}`,
+                    id: item.id ? (item.id.startsWith("fb-live-") ? item.id : `fb-live-${item.id}`) : `fb-live-unknown-${item.publishedAt}`,
                     platform: "facebook",
                     title: item.message ? item.message.substring(0, 50) + "..." : "Facebook Post",
                     description: item.message || "",
@@ -287,11 +288,11 @@ export async function GET(request: Request) {
                       likes: item.likes || 0,
                       comments: item.comments || 0,
                       shares: item.shares || 0,
-                      views: 0,
+                      views: viewEstimate,
                       saves: 0,
-                      followerCount: 0,
+                      followerCount: item.followerCount || 0,
                     },
-                    uesScore: 90 + Math.floor(Math.random() * 10),
+                    uesScore: computeUES(viewEstimate, item.likes || 0, item.comments || 0, item.shares || 0),
                     publishedAt: item.publishedAt || new Date().toISOString(),
                   });
                 });
@@ -359,7 +360,7 @@ export async function GET(request: Request) {
                       shares: 0,
                       views: (item.likes + item.replies) * 10,
                       saves: 0,
-                      followerCount: 0,
+                      followerCount: item.followerCount || 0,
                     },
                     uesScore: computeUES((item.likes + item.replies) * 10, item.likes, item.replies),
                     publishedAt: item.publishedAt

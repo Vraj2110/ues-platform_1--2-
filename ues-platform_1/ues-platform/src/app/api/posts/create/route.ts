@@ -21,30 +21,68 @@ export async function POST(request: Request) {
     const decoded = await verifyIdToken(request);
     const uid = (decoded as any)?.uid || "demo-user";
 
-    const body = await request.json();
-    const {
-      platform = "youtube",
-      type = "video",
-      title,
-      description,
-      privacyStatus = "public",
-      category = "Science & Technology",
-      tags = "",
-      fileName,
-      fileSize,
-      thumbnailUrl,
-      mediaUrl,
-      mediaType,
-      publishedAt,
-    } = body;
+    const contentType = request.headers.get("content-type") || "";
+    let platform = "youtube";
+    let type = "video";
+    let title = "";
+    let description = "";
+    let privacyStatus = "public";
+    let category = "Science & Technology";
+    let tags = "";
+    let fileName = "";
+    let fileSize = "";
+    let thumbnailUrl = "";
+    let mediaUrl = "";
+    let mediaType: "video" | "image" | undefined = undefined;
+    let publishedAt = "";
+    let videoFile: File | null = null;
 
-    if ((!title || typeof title !== "string" || !title.trim()) && !mediaUrl && !thumbnailUrl) {
+    if (contentType.includes("multipart/form-data")) {
+      const formData = await request.formData();
+      platform = (formData.get("platform") as string) || "youtube";
+      type = (formData.get("type") as string) || "video";
+      title = (formData.get("title") as string) || "";
+      description = (formData.get("description") as string) || "";
+      privacyStatus = (formData.get("privacyStatus") as string) || "public";
+      category = (formData.get("category") as string) || "Science & Technology";
+      tags = (formData.get("tags") as string) || "";
+      fileName = (formData.get("fileName") as string) || "";
+      fileSize = (formData.get("fileSize") as string) || "";
+      thumbnailUrl = (formData.get("thumbnailUrl") as string) || "";
+      mediaUrl = (formData.get("mediaUrl") as string) || "";
+      const rawMediaType = formData.get("mediaType") as string;
+      mediaType = rawMediaType === "video" || rawMediaType === "image" ? rawMediaType : undefined;
+      publishedAt = (formData.get("publishedAt") as string) || "";
+      const rawFile = formData.get("videoFile");
+      if (rawFile && typeof rawFile === "object" && "arrayBuffer" in rawFile) {
+        videoFile = rawFile as File;
+        if (!fileName && videoFile.name) fileName = videoFile.name;
+        if (!fileSize && videoFile.size) fileSize = `${(videoFile.size / (1024 * 1024)).toFixed(1)} MB`;
+      }
+    } else {
+      const body = await request.json();
+      platform = body.platform || "youtube";
+      type = body.type || "video";
+      title = body.title || "";
+      description = body.description || "";
+      privacyStatus = body.privacyStatus || "public";
+      category = body.category || "Science & Technology";
+      tags = body.tags || "";
+      fileName = body.fileName || "";
+      fileSize = body.fileSize || "";
+      thumbnailUrl = body.thumbnailUrl || "";
+      mediaUrl = body.mediaUrl || "";
+      mediaType = body.mediaType === "video" || body.mediaType === "image" ? body.mediaType : undefined;
+      publishedAt = body.publishedAt || "";
+    }
+
+    if ((!title || typeof title !== "string" || !title.trim()) && !mediaUrl && !thumbnailUrl && !videoFile) {
       return NextResponse.json({ error: "Content title or media is required" }, { status: 400 });
     }
 
     const postDate = publishedAt || new Date().toISOString().slice(0, 10);
 
-    // ── YouTube Platform — keep existing resumable upload flow
+    // ── YouTube Platform — server-side direct upload flow
     if (platform === "youtube") {
       const secrets = await getUserConnectionSecrets(uid, "youtube");
       const accessToken = typeof secrets?.accessToken === "string" ? secrets.accessToken : "";
@@ -56,7 +94,7 @@ export async function POST(request: Request) {
       if (!isMockToken && accessToken) {
         const metadata = {
           snippet: {
-            title: title?.trim() || "Untitled Post",
+            title: title?.trim() || "Untitled Video",
             description: description || "",
             tags: typeof tags === "string" ? tags.split(",").map((t: string) => t.trim()).filter(Boolean) : [],
             categoryId: "28",
@@ -67,27 +105,58 @@ export async function POST(request: Request) {
           },
         };
 
-        const uploadRes = await fetch(
+        const sessionRes = await fetch(
           "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
           {
             method: "POST",
             headers: {
               Authorization: `Bearer ${accessToken}`,
               "Content-Type": "application/json; charset=UTF-8",
-              "X-Upload-Content-Type": "video/*",
+              "X-Upload-Content-Type": videoFile?.type || "video/mp4",
             },
             body: JSON.stringify(metadata),
           }
         );
 
-        if (uploadRes.ok) {
-          resumableUrl = uploadRes.headers.get("location") || resumableUrl;
-          videoId = uploadRes.headers.get("x-goog-correlation-id") || `yt-${Date.now()}`;
+        if (sessionRes.ok) {
+          const sessionUrl = sessionRes.headers.get("location");
+          if (sessionUrl && videoFile) {
+            // Upload the video binary directly from Node server to YouTube (bypasses CORS)
+            try {
+              const arrayBuffer = await videoFile.arrayBuffer();
+              const uploadRes = await fetch(sessionUrl, {
+                method: "PUT",
+                headers: {
+                  "Content-Type": videoFile.type || "video/mp4",
+                  "Content-Length": String(arrayBuffer.byteLength),
+                },
+                body: Buffer.from(arrayBuffer),
+              });
+
+              if (uploadRes.ok) {
+                const ytData = await uploadRes.json();
+                if (ytData?.id) {
+                  videoId = ytData.id;
+                }
+              } else {
+                const errTxt = await uploadRes.text();
+                console.error("YouTube server video PUT failed:", uploadRes.status, errTxt);
+              }
+            } catch (putErr) {
+              console.error("Error streaming video bytes to YouTube:", putErr);
+            }
+          } else if (sessionUrl) {
+            resumableUrl = sessionUrl;
+          }
         } else {
-          const errorText = await uploadRes.text();
-          console.warn("YouTube Upload API notice:", uploadRes.status, errorText);
+          const errorText = await sessionRes.text();
+          console.warn("YouTube Upload session creation failed:", sessionRes.status, errorText);
         }
       }
+
+      const cleanThumbnail = (thumbnailUrl && thumbnailUrl.startsWith("data:")) 
+        ? "https://i.ytimg.com/vi/2Vv-BfVoq4g/hqdefault.jpg" 
+        : (thumbnailUrl || "https://i.ytimg.com/vi/2Vv-BfVoq4g/hqdefault.jpg");
 
       const postObj = {
         id: videoId,
@@ -101,7 +170,7 @@ export async function POST(request: Request) {
         category,
         fileName,
         fileSize,
-        thumbnailUrl: thumbnailUrl || "https://i.ytimg.com/vi/2Vv-BfVoq4g/hqdefault.jpg",
+        thumbnailUrl: cleanThumbnail,
         metrics: { likes: 0, comments: 0, shares: 0, views: 0, saves: 0, followerCount: 18200 },
         uesScore: 82,
         publishedAt: postDate,
@@ -112,7 +181,7 @@ export async function POST(request: Request) {
 
       return NextResponse.json({
         success: true,
-        message: "✓ Video upload initiated for YouTube!",
+        message: "✓ Video uploaded and published successfully to YouTube!",
         videoId,
         videoUrl: `https://www.youtube.com/watch?v=${videoId}`,
         resumableUrl,

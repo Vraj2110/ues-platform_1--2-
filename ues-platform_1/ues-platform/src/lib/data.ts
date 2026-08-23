@@ -35,6 +35,22 @@ export const POSTS: Post[] = [
     metrics: { likes: 4820, comments: 312, shares: 198, views: 48200, saves: 620, followerCount: 28400 },
     uesScore: 91,
     publishedAt: "2024-03-12",
+    aiAnalysis: {
+      platformScore: 94,
+      platformScoreLabel: "Top 5%",
+      confidenceScore: 94,
+      contentQuality: "Exceptional",
+      engagementScore: 91,
+      overallRating: 4.8,
+      performanceBadge: "Excellent",
+      captionScore: 88,
+      hashtagScore: 75,
+      hookScore: 92,
+      ctaScore: 85,
+      readabilityScore: 90,
+      sentiment: "Positive",
+      recommendations: ["Great authentic footage.", "Consider a stronger CTA at the end."]
+    }
   },
   {
     id: "p2",
@@ -45,6 +61,22 @@ export const POSTS: Post[] = [
     metrics: { likes: 1840, comments: 247, shares: 92, views: 142000, saves: 0, followerCount: 18200 },
     uesScore: 87,
     publishedAt: "2024-03-11",
+    aiAnalysis: {
+      platformScore: 89,
+      platformScoreLabel: "Top 10%",
+      confidenceScore: 92,
+      contentQuality: "Great",
+      engagementScore: 87,
+      overallRating: 4.5,
+      performanceBadge: "Great",
+      captionScore: 90,
+      hashtagScore: 80,
+      hookScore: 88,
+      ctaScore: 78,
+      readabilityScore: 85,
+      sentiment: "Informative",
+      recommendations: ["Technical deep dives perform well.", "Add timestamps to the description."]
+    }
   },
   {
     id: "p3",
@@ -55,6 +87,22 @@ export const POSTS: Post[] = [
     metrics: { likes: 2140, comments: 384, shares: 641, views: 89400, saves: 312, followerCount: 12600 },
     uesScore: 74,
     publishedAt: "2024-03-10",
+    aiAnalysis: {
+      platformScore: 82,
+      platformScoreLabel: "Above Avg",
+      confidenceScore: 90,
+      contentQuality: "Great",
+      engagementScore: 74,
+      overallRating: 4.0,
+      performanceBadge: "Great",
+      captionScore: 95,
+      hashtagScore: 60,
+      hookScore: 98,
+      ctaScore: 70,
+      readabilityScore: 88,
+      sentiment: "Provocative",
+      recommendations: ["Strong conversational piece.", "Keep utilizing hot takes."]
+    }
   },
   {
     id: "p_fb1",
@@ -65,6 +113,22 @@ export const POSTS: Post[] = [
     metrics: { likes: 1250, comments: 145, shares: 320, views: 24500, saves: 40, followerCount: 45000 },
     uesScore: 78,
     publishedAt: "2024-03-09",
+    aiAnalysis: {
+      platformScore: 75,
+      platformScoreLabel: "Average",
+      confidenceScore: 88,
+      contentQuality: "Good",
+      engagementScore: 78,
+      overallRating: 3.5,
+      performanceBadge: "Average",
+      captionScore: 75,
+      hashtagScore: 50,
+      hookScore: 65,
+      ctaScore: 60,
+      readabilityScore: 92,
+      sentiment: "Neutral",
+      recommendations: ["Standard update.", "Add a stronger hook or interactive question."]
+    }
   },
   {
     id: "p4",
@@ -85,6 +149,22 @@ export const POSTS: Post[] = [
     metrics: { likes: 1240, comments: 88, shares: 34, views: 19200, saves: 142, followerCount: 28400 },
     uesScore: 68,
     publishedAt: "2024-03-07",
+    aiAnalysis: {
+      platformScore: 65,
+      platformScoreLabel: "Below Avg",
+      confidenceScore: 85,
+      contentQuality: "Good",
+      engagementScore: 68,
+      overallRating: 3.0,
+      performanceBadge: "Needs Improvement",
+      captionScore: 70,
+      hashtagScore: 80,
+      hookScore: 60,
+      ctaScore: 65,
+      readabilityScore: 85,
+      sentiment: "Positive",
+      recommendations: ["Static photos have lower reach.", "Try a Reel next time."]
+    }
   },
   {
     id: "p6",
@@ -95,7 +175,23 @@ export const POSTS: Post[] = [
     metrics: { likes: 3120, comments: 514, shares: 184, views: 212000, saves: 0, followerCount: 18200 },
     uesScore: 95,
     publishedAt: "2024-03-05",
-  },
+    aiAnalysis: {
+      platformScore: 98,
+      platformScoreLabel: "Top 1%",
+      confidenceScore: 96,
+      contentQuality: "Exceptional",
+      engagementScore: 95,
+      overallRating: 4.9,
+      performanceBadge: "Excellent",
+      captionScore: 92,
+      hashtagScore: 85,
+      hookScore: 95,
+      ctaScore: 98,
+      readabilityScore: 88,
+      sentiment: "Educational",
+      recommendations: ["Extremely high utility.", "Repurpose as a short or Reel."]
+    }
+  }
 ];
 
 // ─── UES Score ─────────────────────────────────────────────────────────────
@@ -221,3 +317,74 @@ export function formatNumber(n: number): string {
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return n.toString();
 }
+
+import { DashboardOverview, PlatformOverview } from "@/types";
+
+export const DASHBOARD_OVERVIEW: DashboardOverview = {
+  totalFollowers: 111000,
+  totalReach: 325400,
+  totalImpressions: 480200,
+  totalEngagement: 25400,
+  engagementRate: 5.2,
+  totalPosts: 127,
+  averageScore: 84.2,
+  bestPlatform: "YouTube",
+};
+
+export const PLATFORM_OVERVIEW_DATA: PlatformOverview[] = [
+  {
+    platform: "Instagram",
+    followers: 28400,
+    posts: 48,
+    reach: 67400,
+    impressions: 89000,
+    engagement: 7410,
+    engagementRate: 8.3,
+    growth: 4.2,
+    aiScore: 82,
+  },
+  {
+    platform: "YouTube",
+    followers: 18200,
+    posts: 31,
+    reach: 142000,
+    impressions: 212000,
+    engagement: 8200,
+    engagementRate: 3.8,
+    growth: 12.5,
+    aiScore: 91,
+  },
+  {
+    platform: "X / Twitter",
+    followers: 12600,
+    posts: 28,
+    reach: 89400,
+    impressions: 110000,
+    engagement: 3477,
+    engagementRate: 3.1,
+    growth: 1.8,
+    aiScore: 74,
+  },
+  {
+    platform: "Facebook",
+    followers: 45000,
+    posts: 15,
+    reach: 24500,
+    impressions: 48000,
+    engagement: 1755,
+    engagementRate: 3.6,
+    growth: 0.5,
+    aiScore: 78,
+  },
+  {
+    platform: "LinkedIn",
+    followers: 6800,
+    posts: 20,
+    reach: 18400,
+    impressions: 21200,
+    engagement: 1281,
+    engagementRate: 6.0,
+    growth: 5.4,
+    aiScore: 88,
+  },
+];

@@ -96,9 +96,9 @@ export async function GET(request: Request) {
   const code = params.get("code");
   const error = params.get("error");
 
+  const origin = process.env.GOOGLE_REDIRECT_URI ? new URL(process.env.GOOGLE_REDIRECT_URI).origin : request.url;
   if (error) {
-    const redirectUrl = new URL(`/connect`, request.url);
-    if (redirectUrl.hostname === "localhost") redirectUrl.port = "3001";
+    const redirectUrl = new URL(`/connect`, origin);
     redirectUrl.searchParams.set("error", error);
     if (state) {
       redirectUrl.searchParams.set("state", state);
@@ -107,15 +107,13 @@ export async function GET(request: Request) {
   }
 
   if (!state || !code) {
-    const r = new URL(`/connect?error=missing_oauth_parameters`, request.url);
-    if (r.hostname === "localhost") r.port = "3001";
+    const r = new URL(`/connect?error=missing_oauth_parameters`, origin);
     return NextResponse.redirect(r);
   }
 
   const record = await resolveOAuthState(state);
   if (!record) {
-    const r = new URL(`/connect?error=invalid_state`, request.url);
-    if (r.hostname === "localhost") r.port = "3001";
+    const r = new URL(`/connect?error=invalid_state`, origin);
     return NextResponse.redirect(r);
   }
 
@@ -234,16 +232,14 @@ export async function GET(request: Request) {
         createdAt: new Date().toISOString(),
       });
     }
-    const redirectUrl = new URL(`/connect`, request.url);
-    if (redirectUrl.hostname === "localhost") redirectUrl.port = "3001";
+    const redirectUrl = new URL(`/connect`, origin);
     redirectUrl.searchParams.set("success", "connected");
     redirectUrl.searchParams.set("platform", platform === "google" ? "youtube" : (platform || "youtube"));
     return NextResponse.redirect(redirectUrl);
   } catch (err) {
     console.error("OAuth callback failed:", err);
     const reason = encodeURIComponent(String(err instanceof Error ? err.message : String(err) || "unknown_error"));
-    const redirectUrl = new URL(`/connect`, request.url);
-    if (redirectUrl.hostname === "localhost") redirectUrl.port = "3001";
+    const redirectUrl = new URL(`/connect`, origin);
     redirectUrl.searchParams.set("error", "oauth_failed");
     redirectUrl.searchParams.set("reason", reason);
     return NextResponse.redirect(redirectUrl);

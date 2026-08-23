@@ -141,7 +141,7 @@ export function useRealTimePosts() {
                   shares: Math.round(realLikes * 0.15),
                   views: realViews,
                   saves: 0,
-                  followerCount: 18200,
+                  followerCount: v.followerCount || 0,
                 },
                 uesScore,
                 publishedAt: v.publishedAt ? new Date(v.publishedAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
@@ -250,11 +250,15 @@ export function useRealTimePosts() {
 
   const customPostIds = new Set(validCustomPosts.map((p) => p.id));
 
-  // Static demo fallback — only show for platforms with no live data
+  // Static demo fallback — only show for platforms with no live data, 
+  // BUT only if NO real accounts are connected. If they connected at least one, show only their real data.
+  const hasAnyConnection = youtubeConnected || connectedPlatforms.size > 0;
+  
   const staticFallback = POSTS.filter((p) => {
+    if (hasAnyConnection) return false; // Do not mix fake data with real connected data
+    
     if (customPostIds.has(p.id)) return false;
     if (p.platform === "youtube") return !youtubeConnected;
-    // Show static demo posts only if that platform has no live/custom posts
     return livePlatformPosts.filter((lp) => lp.platform === p.platform).length === 0;
   });
 
@@ -325,7 +329,7 @@ export function useRealTimePosts() {
                       title: v.title || "YouTube Channel Video", thumbnailUrl: v.thumbnailUrl || undefined,
                       url: v.id ? `https://www.youtube.com/watch?v=${v.id}` : undefined,
                       type: "video" as const, status: "active" as const, privacyStatus: "public",
-                      metrics: { likes: realLikes, comments: realComments, shares: Math.round(realLikes * 0.15), views: realViews, saves: 0, followerCount: 18200 },
+                      metrics: { likes: realLikes, comments: realComments, shares: Math.round(realLikes * 0.15), views: realViews, saves: 0, followerCount: v.followerCount || 0 },
                       uesScore, publishedAt: v.publishedAt ? new Date(v.publishedAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
                     } as Post;
                   });

@@ -22,7 +22,10 @@ export async function POST(request: Request) {
     }
 
     // Always update thumbnail in server application memory store first
-    updateCustomPostThumbnail(uid, videoId, thumbnail);
+    const cleanThumbnailUrl = typeof thumbnail === "string" && thumbnail.startsWith("data:") 
+      ? `https://i.ytimg.com/vi/${videoId.replace(/^yt-/, "")}/hqdefault.jpg`
+      : thumbnail;
+    updateCustomPostThumbnail(uid, videoId, cleanThumbnailUrl);
 
     if (uid !== "demo-user") {
       // Retrieve user's stored YouTube OAuth secrets

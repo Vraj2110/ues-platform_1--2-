@@ -6,9 +6,12 @@ export const dynamic = "force-dynamic";
 
 function buildRedirectUri(request: Request, platformId: string) {
   const requestUrl = new URL(request.url);
-  const configuredRedirectUri = platformId === "youtube" || platformId === "google"
-    ? process.env.GOOGLE_REDIRECT_URI
-    : undefined;
+  const envKey = platformId === "youtube" || platformId === "google" 
+    ? "GOOGLE_REDIRECT_URI" 
+    : platformId === "x" ? "TWITTER_REDIRECT_URI" 
+    : `${platformId.toUpperCase()}_REDIRECT_URI`;
+    
+  const configuredRedirectUri = process.env[envKey];
 
   if (configuredRedirectUri) {
     return configuredRedirectUri;

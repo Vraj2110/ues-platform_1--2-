@@ -41,6 +41,23 @@ export interface PostMetrics {
   followerCount: number;
 }
 
+export interface AIAnalysis {
+  platformScore: number;
+  platformScoreLabel: string;
+  confidenceScore: number;
+  contentQuality: string;
+  engagementScore: number;
+  overallRating: number;
+  performanceBadge: string;
+  captionScore: number;
+  hashtagScore: number;
+  hookScore: number;
+  ctaScore: number;
+  readabilityScore: number;
+  sentiment: string;
+  recommendations: string[];
+}
+
 export interface Post {
   id: string;
   platform: PlatformId;
@@ -53,6 +70,7 @@ export interface Post {
   metrics: PostMetrics;
   uesScore: number;
   publishedAt: string;
+  aiAnalysis?: AIAnalysis;
 }
 
 // ─── UES Score Types ───────────────────────────────────────────────────────
@@ -170,4 +188,27 @@ export interface DashboardStat {
   changeDirection?: "up" | "down" | "neutral";
   icon: string;
   iconBg?: string;
+}
+
+export interface PlatformOverview {
+  platform: string;
+  followers: number;
+  posts: number;
+  reach: number;
+  impressions: number;
+  engagement: number;
+  engagementRate: number;
+  growth: number;
+  aiScore: number;
+}
+
+export interface DashboardOverview {
+  totalFollowers: number;
+  totalReach: number;
+  totalImpressions: number;
+  totalEngagement: number;
+  engagementRate: number;
+  totalPosts: number;
+  averageScore: number;
+  bestPlatform: string;
 }
