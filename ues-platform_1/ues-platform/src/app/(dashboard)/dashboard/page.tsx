@@ -15,7 +15,6 @@ import { useRealTimePosts } from "@/hooks/useRealTimePosts";
 const PLATFORM_META: Record<string, { name: string; icon: string; color: string }> = {
   instagram: { name: "Instagram", icon: "📸", color: "#FF6B6B" },
   youtube: { name: "YouTube", icon: "▶️", color: "#4ECDC4" },
-  x: { name: "X / Twitter", icon: "🐦", color: "rgba(247,255,247,0.6)" },
   facebook: { name: "Facebook", icon: "📘", color: "#1877F2" },
   linkedin: { name: "LinkedIn", icon: "💼", color: "rgba(78,205,196,0.7)" },
   threads: { name: "Threads", icon: "🧵", color: "#000000" },
@@ -46,7 +45,7 @@ export default function DashboardPage() {
   ];
 
   const platformScores = Object.keys(PLATFORM_META).map((platKey) => {
-    const pPosts = allPosts.filter((p) => (p.platform as string) === platKey || (platKey === "x" && (p.platform as string) === "twitter"));
+    const pPosts = allPosts.filter((p) => (p.platform as string) === platKey);
     const score = pPosts.length > 0
       ? Math.round(pPosts.reduce((acc, p) => acc + (p.uesScore || 0), 0) / pPosts.length)
       : (connectedPlatforms.has(platKey) ? 82 : 0);

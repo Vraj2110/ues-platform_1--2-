@@ -12,7 +12,7 @@ import { auth } from "@/lib/firebase";
 const PLATFORM_OPTIONS = [
   { value: "youtube", label: "YouTube ▶️", description: "Upload videos directly to YouTube" },
   { value: "instagram", label: "Instagram 📸", description: "Post to Instagram (Image or Reel)" },
-  { value: "x", label: "X / Twitter 🐦", description: "Post tweets (text, max 280 chars)" },
+  { value: "threads", label: "Threads 🧵", description: "Post threads (text & images, max 500 chars)" },
   { value: "facebook", label: "Facebook 📘", description: "Post to your Facebook Page (Text, Image, Video)" },
 ];
 
@@ -34,7 +34,7 @@ const YOUTUBE_PRIVACY = [
 ];
 
 const CHAR_LIMITS: Record<string, number> = {
-  x: 280,
+  threads: 500,
   facebook: 63206,
   instagram: 2200,
   youtube: 5000,
@@ -66,8 +66,8 @@ export default function AddPostPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const isYouTube = platform === "youtube";
-  const supportsMedia = platform === "facebook" || platform === "instagram";
-  const isTextPlatform = platform === "x" || platform === "facebook" || platform === "instagram";
+  const supportsMedia = platform === "facebook" || platform === "instagram" || platform === "threads";
+  const isTextPlatform = platform === "threads" || platform === "facebook" || platform === "instagram";
   const charLimit = CHAR_LIMITS[platform] || 5000;
 
   // Combine title + description for text platforms
@@ -129,7 +129,7 @@ export default function AddPostPage() {
     }
 
     if (isTextPlatform && isOverLimit) {
-      setError(`Content exceeds the ${charLimit} character limit for ${platform === "x" ? "X/Twitter" : platform}.`);
+      setError(`Content exceeds the ${charLimit} character limit for ${platform === "threads" ? "Threads" : platform}.`);
       return;
     }
 
@@ -324,7 +324,7 @@ export default function AddPostPage() {
 
       setUploadProgress(100);
 
-      const platformDisplay = platform === "x" ? "X/Twitter" : platform.charAt(0).toUpperCase() + platform.slice(1);
+      const platformDisplay = platform === "threads" ? "Threads" : platform.charAt(0).toUpperCase() + platform.slice(1);
       const publishedUrl = data.post?.url || data.videoUrl;
       setSuccessMessage(
         `🎉 Published to ${platformDisplay} successfully!${publishedUrl ? ` View: ${publishedUrl}` : ""}`
@@ -369,7 +369,7 @@ export default function AddPostPage() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
   }
 
-  const platformDisplay = platform === "x" ? "X / Twitter" : platform.charAt(0).toUpperCase() + platform.slice(1);
+  const platformDisplay = platform === "threads" ? "Threads" : platform.charAt(0).toUpperCase() + platform.slice(1);
 
   return (
     <div className="page-enter">

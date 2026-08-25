@@ -232,7 +232,7 @@ export default function ConnectClient({ platforms }: { platforms: Platform[] }) 
   const PLATFORM_DESC: Record<string, string> = {
     instagram: "Likes, comments, saves, reach, and story views normalized to UES.",
     youtube: "Views, likes, comments, watch time, and subscriber delta.",
-    x: "Likes, retweets, replies, impressions, and profile clicks.",
+    threads: "Likes, replies, views, and reposts normalized to UES.",
     linkedin: "Reactions, comments, shares, impressions, and click-through.",
     tiktok: "Views, likes, comments, shares, and completion rate.",
     facebook: "Reactions, comments, shares, reach, and page engagement.",
