@@ -7,12 +7,8 @@ import {
 } from "./baseAdapter";
 import { getUserConnections, getUserConnectionSecrets } from "@/lib/server/connections";
 import { fetchYouTubeRecentVideos, fetchYouTubeChannel, refreshGoogleToken } from "@/lib/server/oauth";
+import { calculateUnifiedEngagement } from "@/lib/server/uesService";
 import type { PlatformId } from "@/types";
-
-function computeUES(views: number, likes: number, comments: number): number {
-  if (views <= 0 && likes <= 0 && comments <= 0) return 85;
-  return Math.min(99, Math.max(65, Math.round(Math.log10(views + 1) * 14 + ((likes * 3 + comments * 6) / (views + 1)) * 40)));
-}
 
 export class YouTubeSyncAdapter extends BasePlatformSyncAdapter {
   readonly platformId: PlatformId = "youtube";
@@ -31,12 +27,11 @@ export class YouTubeSyncAdapter extends BasePlatformSyncAdapter {
     const isMock = !accessToken || accessToken === "mock-access-token" || accessToken === "connected-access-token" || secrets?.mockConnection === true;
 
     if (isMock) {
+      // Disallow silent mock connection callbacks, enforce real authentication checks as requested
       return {
-        valid: true,
-        status: "success",
-        accessToken: "mock-access-token",
-        accountId: conn.accountId || conn.channelId || "mock-yt-channel",
-        accountName: conn.accountName || "Connected YouTube Channel",
+        valid: false,
+        status: "auth_required",
+        error: "YouTube authentication required (mock connections disabled)",
       };
     }
 
@@ -53,24 +48,6 @@ export class YouTubeSyncAdapter extends BasePlatformSyncAdapter {
   async fetchPosts(uid: string, auth: AuthCheckResult): Promise<FetchedPostItem[]> {
     if (!auth.valid || !auth.accessToken) return [];
 
-    if (auth.accessToken === "mock-access-token") {
-      const today = new Date().toISOString().slice(0, 10);
-      return [
-        {
-          platformPostId: "mock-video-1",
-          accountId: auth.accountId || "mock-yt-channel",
-          title: `Welcome to your connected YouTube channel — ${auth.accountName || "YouTube"}`,
-          thumbnailUrl: "https://i.ytimg.com/vi/2Vv-BfVoq4g/hqdefault.jpg",
-          url: "https://www.youtube.com/watch?v=2Vv-BfVoq4g",
-          type: "video",
-          privacyStatus: "public",
-          metrics: { likes: 942, comments: 128, shares: 94, views: 18240, saves: 0, followerCount: 14500 },
-          uesScore: 88,
-          publishedAt: today,
-        },
-      ];
-    }
-
     let tokenToUse = auth.accessToken;
     let channelData = await fetchYouTubeChannel(tokenToUse).catch(() => null);
 
@@ -81,7 +58,9 @@ export class YouTubeSyncAdapter extends BasePlatformSyncAdapter {
           tokenToUse = refreshed.access_token;
           channelData = await fetchYouTubeChannel(tokenToUse).catch(() => null);
         }
-      } catch {}
+      } catch (e) {
+        console.error("[YouTube API] Token refresh failure:", e);
+      }
     }
 
     const followerCount = Number(channelData?.items?.[0]?.statistics?.subscriberCount || 0);
@@ -90,9 +69,32 @@ export class YouTubeSyncAdapter extends BasePlatformSyncAdapter {
     return videos
       .filter((v: any) => !v.privacyStatus || v.privacyStatus === "public")
       .map((v: any) => {
-        const views = Number(v.views || 0);
-        const likes = Number(v.likes || 0);
-        const comments = Number(v.comments || 0);
+        const views = typeof v.views === "number" ? v.views : null;
+        const likes = typeof v.likes === "number" ? v.likes : null;
+        const comments = typeof v.comments === "number" ? v.comments : null;
+
+        const metricsData = {
+          likes,
+          comments,
+          shares: null,
+          views,
+          saves: null,
+          reach: null,
+          impressions: null,
+          followerCount,
+          dataSource: "youtube_api",
+          syncStatus: "success" as const,
+        };
+
+        const { score, engagementRate } = calculateUnifiedEngagement(metricsData);
+
+        console.log(`[YouTube] Authentication: SUCCESS`);
+        console.log(`[YouTube] Post: ${v.id}`);
+        console.log(`[YouTube] Views: ${views}`);
+        console.log(`[YouTube] Likes: ${likes}`);
+        console.log(`[YouTube] Comments: ${comments}`);
+        console.log(`[YouTube] Score: ${score}/100`);
+
         return {
           platformPostId: String(v.id),
           accountId: auth.accountId || "MINE",
@@ -102,14 +104,10 @@ export class YouTubeSyncAdapter extends BasePlatformSyncAdapter {
           type: "video",
           privacyStatus: "public",
           metrics: {
-            likes,
-            comments,
-            shares: null,
-            views,
-            saves: null,
-            followerCount,
+            ...metricsData,
+            engagementRate,
           },
-          uesScore: computeUES(views, likes, comments),
+          uesScore: score,
           publishedAt: v.publishedAt ? new Date(v.publishedAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
         };
       });

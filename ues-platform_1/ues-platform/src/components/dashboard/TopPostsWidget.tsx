@@ -2,8 +2,10 @@
 
 import { Card, CardTitle, CardSubtitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { useRealTimePosts } from "@/hooks/useRealTimePosts";
+import Link from "next/link";
+import type { Post } from "@/types";
 import { getPlatformIcon } from "@/components/ui/PlatformIcons";
+import { formatNumber } from "@/lib/data";
 
 const platformIcons: Record<string, string> = {
   instagram: "📸", youtube: "▶️", facebook: "📘"
@@ -15,14 +17,17 @@ const platformNames: Record<string, string> = {
 
 const scoreColor = (s: number) => s >= 70 ? "#4ECDC4" : "#FF6B6B";
 
-export function TopPostsWidget() {
-  const { allPosts } = useRealTimePosts();
-  const topPosts = [...allPosts].sort((a, b) => b.uesScore - a.uesScore).slice(0, 3);
+interface TopPostsWidgetProps {
+  posts?: Post[];
+}
+
+export function TopPostsWidget({ posts = [] }: TopPostsWidgetProps) {
+  const topPosts = posts.slice(0, 3);
 
   return (
     <Card>
       <CardTitle>Top Performing Posts</CardTitle>
-      <CardSubtitle>Highest UES scores this month</CardSubtitle>
+      <CardSubtitle>Highest UES scores in the selected period</CardSubtitle>
       <div className="mt-5 space-y-3">
         {topPosts.map((post, i) => (
           <div
@@ -42,7 +47,9 @@ export function TopPostsWidget() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{post.title}</p>
-              <p className="text-xs text-mint-700">{platformNames[post.platform] || post.platform}</p>
+              <p className="text-xs text-mint-700 mt-0.5 font-mono">
+                {platformNames[post.platform] || post.platform} · {formatNumber(post.metrics?.views || post.metrics?.reach || 0)} {post.platform === "youtube" ? "views" : "reach"}
+              </p>
             </div>
             <span
               className="font-display font-bold text-base"
@@ -53,11 +60,13 @@ export function TopPostsWidget() {
           </div>
         ))}
         {topPosts.length === 0 && (
-          <p className="text-sm text-mint-700 text-center py-4">No posts yet.</p>
+          <p className="text-sm text-mint-700 text-center py-4">No posts found in the selected range.</p>
         )}
-        <Button variant="ghost" size="sm" className="w-full mt-1">
-          View all posts →
-        </Button>
+        <Link href="/posts" className="w-full">
+          <Button variant="ghost" size="sm" className="w-full mt-1">
+            View all posts →
+          </Button>
+        </Link>
       </div>
     </Card>
   );

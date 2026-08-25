@@ -1,14 +1,26 @@
 "use client";
 
-import { DASHBOARD_OVERVIEW, getUESGradeColor } from "@/lib/data";
+import { getUESGradeColor } from "@/lib/data";
 import { Card, CardTitle, CardHeader, CardContent } from "@/components/ui/Card";
 import { UESGaugeChart } from "@/components/charts/Charts";
 import { Badge } from "@/components/ui/Badge";
 
-export function PerformanceScoreWidget() {
-  const score = DASHBOARD_OVERVIEW.averageScore;
+interface PerformanceScoreWidgetProps {
+  score: number;
+  grade: string;
+  trend: number | string;
+  percentile: string;
+}
+
+export function PerformanceScoreWidget({
+  score,
+  grade,
+  trend,
+  percentile,
+}: PerformanceScoreWidgetProps) {
   const gradeColor = getUESGradeColor(score);
-  
+  const trendText = typeof trend === "number" ? `${trend >= 0 ? "↑" : "↓"} ${Math.abs(trend)}% vs last period` : "Trend N/A";
+
   return (
     <Card className="flex flex-col h-full items-center text-center justify-center relative overflow-hidden">
       <div 
@@ -29,13 +41,14 @@ export function PerformanceScoreWidget() {
               {score}
             </span>
             <span className="text-xs uppercase tracking-widest text-mint-700 mt-1 font-bold">
-              Grade A
+              Grade {grade}
             </span>
           </div>
         </div>
         
-        <div className="flex gap-2">
-          <Badge variant="cyan">Top 5% in industry</Badge>
+        <div className="flex flex-col items-center gap-2">
+          <Badge variant="teal" className="text-xs opacity-80">{percentile}</Badge>
+          <span className="text-xs text-cyan-ues mt-1 font-medium">{trendText}</span>
         </div>
       </CardContent>
     </Card>

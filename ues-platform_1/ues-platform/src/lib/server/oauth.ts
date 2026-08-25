@@ -634,6 +634,8 @@ export async function fetchInstagramRecentMedia(accountId: string, accessToken: 
       views,
       saved,
       shares,
+      reach: insight?.reach ?? null,
+      impressions: insight?.impressions ?? null,
       followerCount,
     };
   });
@@ -734,6 +736,8 @@ export async function fetchFacebookRecentPosts(accessToken: string, limit = 20) 
       comments: Number(item.comments?.summary?.total_count || 0),
       shares: Number(item.shares?.count || 0),
       views,
+      reach,
+      impressions,
       followerCount: item.followerCount || 0,
     };
   });
@@ -836,10 +840,10 @@ function normalizeYouTubeAnalytics(data: any, startDate: string, endDate: string
   });
 
   const totals = {
-    views: Number(data?.totalsForAllResults?.views || 0),
-    estimatedMinutesWatched: Number(data?.totalsForAllResults?.estimatedMinutesWatched || 0),
-    subscribersGained: Number(data?.totalsForAllResults?.subscribersGained || 0),
-    likes: Number(data?.totalsForAllResults?.likes || 0),
+    views: Number(data?.totalsForAllResults?.[0] ?? trend.reduce((sum: number, item: any) => sum + item.views, 0)),
+    estimatedMinutesWatched: Number(data?.totalsForAllResults?.[1] ?? trend.reduce((sum: number, item: any) => sum + item.estimatedMinutesWatched, 0)),
+    subscribersGained: Number(data?.totalsForAllResults?.[2] ?? trend.reduce((sum: number, item: any) => sum + item.subscribersGained, 0)),
+    likes: Number(data?.totalsForAllResults?.[3] ?? trend.reduce((sum: number, item: any) => sum + item.likes, 0)),
   };
 
   return {

@@ -1,25 +1,13 @@
 import { NextResponse } from "next/server";
 import { verifyIdToken } from "@/lib/server/auth";
 import { getUserConnections, getUserConnectionSecrets, setUserConnectionSecrets, getDeletedPostIds, syncCustomPostsWithLiveOrigin } from "@/lib/server/connections";
-import { refreshTwitterToken } from "@/lib/server/publishService";
 import {
-  fetchTwitterRecentTweets,
   fetchInstagramRecentMedia,
   fetchFacebookRecentPosts,
-  fetchLinkedInRecentPosts,
-  fetchThreadsRecentPosts,
 } from "@/lib/server/oauth";
+import { calculateUnifiedEngagement } from "@/lib/server/uesService";
 
 export const dynamic = "force-dynamic";
-
-function computeUES(views: number, likes: number, comments: number, shares: number = 0): number {
-  if (views <= 0 && likes <= 0 && comments <= 0) return 76;
-  const base = views > 0 ? Math.min(99, Math.max(60, Math.round(Math.log10(views + 1) * 14))) : 68;
-  const interaction = views > 0
-    ? Math.round(((likes * 3 + comments * 6 + shares * 4) / (views + 1)) * 40)
-    : Math.round((likes * 3 + comments * 6 + shares * 4) / 10);
-  return Math.min(99, Math.max(60, base + interaction));
-}
 
 // Connected fallback posts for platforms when API quota/credits are depleted or mock mode is active
 function getConnectedFallbackPosts(platformId: string, accountName: string = "Connected Account") {
@@ -173,113 +161,63 @@ export async function GET(request: Request) {
       .map(async ([platformId, conn]) => {
         if (platformId === "youtube") return;
 
-        const accountName = conn?.accountName || "Connected Account";
-
         try {
           const secrets = await getUserConnectionSecrets(uid, platformId);
           const accessToken = typeof secrets?.accessToken === "string" ? secrets.accessToken : "";
           const isMock = !accessToken || accessToken === "mock-access-token" || accessToken === "connected-access-token" || secrets?.mockConnection === true;
 
           if (isMock) {
-            // Suppress mock/fallback posts – real data only
             return;
           }
 
-          let fetched = false;
-
-          if (platformId === "x" || platformId === "twitter") {
-            try {
-              let currentToken = accessToken;
-              let tweets: any[] = [];
-              try {
-                tweets = await fetchTwitterRecentTweets(currentToken, 20);
-              } catch (firstErr: any) {
-                // If 401, try refreshing the token
-                if (firstErr.message?.includes("401") && secrets?.refreshToken) {
-                  console.warn("[platform-posts] X token expired, attempting refresh...");
-                  const newTokens = await refreshTwitterToken(secrets.refreshToken as string);
-                  if (newTokens) {
-                    currentToken = newTokens.access_token;
-                    // Save new tokens
-                    await setUserConnectionSecrets(uid, "x", {
-                      ...secrets,
-                      accessToken: newTokens.access_token,
-                      refreshToken: newTokens.refresh_token,
-                      createdAt: new Date().toISOString(),
-                    });
-                    tweets = await fetchTwitterRecentTweets(currentToken, 20);
-                  } else {
-                    throw firstErr;
-                  }
-                } else {
-                  throw firstErr;
-                }
-              }
-
-              if (Array.isArray(tweets) && tweets.length > 0) {
-                fetched = true;
-                tweets.forEach((tweet: any) => {
-                  posts.push({
-                    id: `x-live-${tweet.id}`,
-                    platform: "x",
-                    title: tweet.text?.slice(0, 120) || "Tweet",
-                    thumbnailUrl: tweet.thumbnailUrl || null,
-                    url: `https://x.com/i/web/status/${tweet.id}`,
-                    type: "post",
-                    status: "active",
-                    privacyStatus: "public",
-                    metrics: {
-                      likes: tweet.likes || 0,
-                      comments: tweet.replies || 0,
-                      shares: (tweet.retweets || 0) + (tweet.quotes || 0),
-                      views: tweet.views || 0,
-                      saves: 0,
-                      followerCount: tweet.followerCount || 0,
-                    },
-                    uesScore: computeUES(tweet.views || 0, tweet.likes || 0, tweet.replies || 0, tweet.retweets || 0),
-                    publishedAt: tweet.publishedAt
-                      ? new Date(tweet.publishedAt).toISOString().slice(0, 10)
-                      : new Date().toISOString().slice(0, 10),
-                  });
-                });
-              }
-            } catch (xErr) {
-              const msg = xErr instanceof Error ? xErr.message : String(xErr);
-              console.warn(`[platform-posts] X API error:`, msg);
-              platformErrors.push(`X / Twitter: ${msg}`);
-            }
-
-          } else if (platformId === "instagram") {
+          if (platformId === "instagram") {
             try {
               const accountId = conn?.accountId || "me";
               const media = await fetchInstagramRecentMedia(accountId, accessToken, 25);
               if (Array.isArray(media) && media.length > 0) {
-                fetched = true;
                 media.forEach((item: any) => {
                   const type =
                     item.mediaType === "VIDEO" ? "video" :
                     item.mediaType === "CAROUSEL_ALBUM" ? "reel" : "photo";
-                  const views = item.views ?? null;
-                  const shares = item.shares ?? null;
-                  const saves = item.saved ?? null;
+
+                  const views = typeof item.views === "number" ? item.views : null;
+                  const likes = typeof item.likes === "number" ? item.likes : null;
+                  const comments = typeof item.comments === "number" ? item.comments : null;
+                  const saved = typeof item.saved === "number" ? item.saved : null;
+                  const shares = typeof item.shares === "number" ? item.shares : null;
+                  const reach = typeof item.reach === "number" ? item.reach : null;
+                  const impressions = typeof item.impressions === "number" ? item.impressions : null;
+
+                  const metricsData = {
+                    likes,
+                    comments,
+                    shares,
+                    views,
+                    saves: saved,
+                    reach,
+                    impressions,
+                    followerCount: item.followerCount || null,
+                    dataSource: "instagram_graph_api",
+                    syncStatus: "success" as const,
+                  };
+
+                  const { score, engagementRate } = calculateUnifiedEngagement(metricsData);
+
                   posts.push({
                     id: `ig-live-${item.id}`,
                     platform: "instagram",
                     title: item.caption?.slice(0, 120) || "Instagram Content",
+                    description: item.caption || "",
                     thumbnailUrl: item.thumbnailUrl || null,
                     url: item.permalink || null,
                     type,
                     status: "active",
                     privacyStatus: "public",
                     metrics: {
-                      likes: item.likes,
-                      comments: item.comments,
-                      shares: shares,
-                      views: views,
-                      saves: saves,
-                      followerCount: item.followerCount || 0,
+                      ...metricsData,
+                      engagementRate,
                     },
-                    uesScore: computeUES(views || 0, item.likes, item.comments, shares || 0),
+                    uesScore: score,
                     publishedAt: item.publishedAt
                       ? new Date(item.publishedAt).toISOString().slice(0, 10)
                       : new Date().toISOString().slice(0, 10),
@@ -288,7 +226,7 @@ export async function GET(request: Request) {
               }
             } catch (igErr) {
               const msg = igErr instanceof Error ? igErr.message : String(igErr);
-              console.warn(`[platform-posts] Instagram API error, using connected fallback:`, msg);
+              console.warn(`[platform-posts] Instagram API error:`, msg);
               platformErrors.push(`Instagram API Error: ${msg}`);
             }
 
@@ -296,9 +234,29 @@ export async function GET(request: Request) {
             try {
               const fbPosts = await fetchFacebookRecentPosts(accessToken, 20);
               if (Array.isArray(fbPosts)) {
-                fetched = true;
                 fbPosts.forEach((item: any) => {
-                  const viewEstimate = (item.likes || 0) * 8 + (item.shares || 0) * 15;
+                  const likes = typeof item.likes === "number" ? item.likes : null;
+                  const comments = typeof item.comments === "number" ? item.comments : null;
+                  const shares = typeof item.shares === "number" ? item.shares : null;
+                  const views = typeof item.views === "number" ? item.views : null;
+                  const reach = typeof item.reach === "number" ? item.reach : null;
+                  const impressions = typeof item.impressions === "number" ? item.impressions : null;
+
+                  const metricsData = {
+                    likes,
+                    comments,
+                    shares,
+                    views,
+                    saves: null,
+                    reach,
+                    impressions,
+                    followerCount: item.followerCount || null,
+                    dataSource: "facebook_graph_api",
+                    syncStatus: "success" as const,
+                  };
+
+                  const { score, engagementRate } = calculateUnifiedEngagement(metricsData);
+
                   posts.push({
                     id: item.id ? (item.id.startsWith("fb-live-") ? item.id : `fb-live-${item.id}`) : `fb-live-unknown-${item.publishedAt}`,
                     platform: "facebook",
@@ -311,102 +269,20 @@ export async function GET(request: Request) {
                     category: "Social",
                     thumbnailUrl: item.thumbnailUrl || "",
                     metrics: {
-                      likes: item.likes || 0,
-                      comments: item.comments || 0,
-                      shares: item.shares || 0,
-                      views: viewEstimate,
-                      saves: 0,
-                      followerCount: item.followerCount || 0,
+                      ...metricsData,
+                      engagementRate,
                     },
-                    uesScore: computeUES(viewEstimate, item.likes || 0, item.comments || 0, item.shares || 0),
+                    uesScore: score,
                     publishedAt: item.publishedAt || new Date().toISOString(),
                   });
                 });
               }
             } catch (fbErr) {
               const msg = fbErr instanceof Error ? fbErr.message : String(fbErr);
-              console.warn(`[platform-posts] Facebook API error, using connected fallback:`, msg);
+              console.warn(`[platform-posts] Facebook API error:`, msg);
               platformErrors.push(`Facebook API Error: ${msg}`);
             }
-
-          } else if (platformId === "linkedin") {
-            try {
-              const liPosts = await fetchLinkedInRecentPosts(accessToken);
-              if (Array.isArray(liPosts)) {
-                fetched = true;
-                const activeIds = liPosts.map((item: any) => String(item.id));
-                try { syncCustomPostsWithLiveOrigin(uid, "linkedin", activeIds); } catch {}
-                liPosts.forEach((item: any) => {
-                  posts.push({
-                    id: `li-live-${item.id}`,
-                    platform: "linkedin",
-                    title: item.commentary?.slice(0, 120) || "LinkedIn Post",
-                    thumbnailUrl: item.thumbnailUrl || null,
-                    url: null,
-                    type: "article",
-                    status: "active",
-                    privacyStatus: "public",
-                    metrics: {
-                      likes: item.likes,
-                      comments: item.comments,
-                      shares: 0,
-                      views: (item.likes + item.comments) * 12,
-                      saves: 0,
-                      followerCount: 0,
-                    },
-                    uesScore: computeUES((item.likes + item.comments) * 12, item.likes, item.comments),
-                    publishedAt: item.publishedAt
-                      ? new Date(item.publishedAt).toISOString().slice(0, 10)
-                      : new Date().toISOString().slice(0, 10),
-                  });
-                });
-              }
-            } catch (liErr) {
-              const msg = liErr instanceof Error ? liErr.message : String(liErr);
-              console.warn(`[platform-posts] LinkedIn API error, using connected fallback:`, msg);
-              platformErrors.push(`LinkedIn API Error: ${msg}`);
-            }
-
-          } else if (platformId === "threads") {
-            try {
-              const threadPosts = await fetchThreadsRecentPosts(accessToken, 20);
-              if (Array.isArray(threadPosts)) {
-                fetched = true;
-                const activeIds = threadPosts.map((item: any) => String(item.id));
-                try { syncCustomPostsWithLiveOrigin(uid, "threads", activeIds); } catch {}
-                threadPosts.forEach((item: any) => {
-                  posts.push({
-                    id: `th-live-${item.id}`,
-                    platform: "threads",
-                    title: item.text?.slice(0, 120) || "Threads Post",
-                    thumbnailUrl: item.thumbnailUrl || null,
-                    url: item.permalink || null,
-                    type: "thread",
-                    status: "active",
-                    privacyStatus: "public",
-                    metrics: {
-                      likes: item.likes,
-                      comments: item.replies,
-                      shares: 0,
-                      views: (item.likes + item.replies) * 10,
-                      saves: 0,
-                      followerCount: item.followerCount || 0,
-                    },
-                    uesScore: computeUES((item.likes + item.replies) * 10, item.likes, item.replies),
-                    publishedAt: item.publishedAt
-                      ? new Date(item.publishedAt).toISOString().slice(0, 10)
-                      : new Date().toISOString().slice(0, 10),
-                  });
-                });
-              }
-            } catch (thErr) {
-              const msg = thErr instanceof Error ? thErr.message : String(thErr);
-              console.warn(`[platform-posts] Threads API error, using connected fallback:`, msg);
-              platformErrors.push(`Threads API Error: ${msg}`);
-            }
           }
-
-          // No fallback posts – real data only (or empty for platforms with no posts)
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           console.warn(`[platform-posts] Platform task failed for ${platformId}:`, msg);

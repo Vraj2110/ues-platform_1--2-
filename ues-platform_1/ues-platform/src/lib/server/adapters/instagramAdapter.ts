@@ -7,16 +7,8 @@ import {
 } from "./baseAdapter";
 import { getUserConnections, getUserConnectionSecrets } from "@/lib/server/connections";
 import { fetchInstagramRecentMedia } from "@/lib/server/oauth";
+import { calculateUnifiedEngagement } from "@/lib/server/uesService";
 import type { PlatformId } from "@/types";
-
-function computeUES(views: number, likes: number, comments: number, shares: number = 0): number {
-  if (views <= 0 && likes <= 0 && comments <= 0) return 76;
-  const base = views > 0 ? Math.min(99, Math.max(60, Math.round(Math.log10(views + 1) * 14))) : 68;
-  const interaction = views > 0
-    ? Math.round(((likes * 3 + comments * 6 + shares * 4) / (views + 1)) * 40)
-    : Math.round((likes * 3 + comments * 6 + shares * 4) / 10);
-  return Math.min(99, Math.max(60, base + interaction));
-}
 
 export class InstagramSyncAdapter extends BasePlatformSyncAdapter {
   readonly platformId: PlatformId = "instagram";
@@ -34,12 +26,11 @@ export class InstagramSyncAdapter extends BasePlatformSyncAdapter {
     const isMock = !accessToken || accessToken === "mock-access-token" || secrets?.mockConnection === true;
 
     if (isMock) {
+      // Disallow silent mock connections, enforce real authentication checks as requested
       return {
-        valid: true,
-        status: "success",
-        accessToken: "mock-access-token",
-        accountId: conn.accountId || "mock-ig-account",
-        accountName: conn.accountName || "Mock Instagram",
+        valid: false,
+        status: "auth_required",
+        error: "Instagram authentication required (mock connections disabled)",
       };
     }
 
@@ -55,50 +46,43 @@ export class InstagramSyncAdapter extends BasePlatformSyncAdapter {
   async fetchPosts(uid: string, auth: AuthCheckResult): Promise<FetchedPostItem[]> {
     if (!auth.valid || !auth.accessToken) return [];
 
-    if (auth.accessToken === "mock-access-token") {
-      const today = new Date().toISOString().slice(0, 10);
-      const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-      return [
-        {
-          platformPostId: "ig-connected-1",
-          accountId: auth.accountId || "mock-ig-account",
-          title: `Behind the scenes look at product launch day — ${auth.accountName || "Instagram"}`,
-          thumbnailUrl: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80",
-          url: "https://instagram.com/p/ig-connected-1",
-          type: "photo",
-          privacyStatus: "public",
-          metrics: { likes: 1420, comments: 112, shares: 48, views: 19800, saves: 194, followerCount: 28400 },
-          uesScore: 86,
-          publishedAt: today,
-        },
-        {
-          platformPostId: "ig-connected-2",
-          accountId: auth.accountId || "mock-ig-account",
-          title: "Reel: 5 essential tips to level up your social media engagement in 2026 ✨",
-          thumbnailUrl: "https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=600&auto=format&fit=crop&q=80",
-          url: "https://instagram.com/p/ig-connected-2",
-          type: "reel",
-          privacyStatus: "public",
-          metrics: { likes: 3240, comments: 245, shares: 180, views: 42100, saves: 512, followerCount: 28400 },
-          uesScore: 92,
-          publishedAt: yesterday,
-        },
-      ];
-    }
-
     const mediaItems = await fetchInstagramRecentMedia(auth.accountId || "me", auth.accessToken, 25);
     return mediaItems.map((item: any) => {
       const type =
         item.mediaType === "VIDEO" ? "video" :
         item.mediaType === "CAROUSEL_ALBUM" ? "reel" : "photo";
 
-      // views: from video_views (reels/videos) or impressions (Business accounts), null if unavailable
-      const views = item.views ?? null;
-      const likes = typeof item.likes === "number" ? item.likes : 0;
-      const comments = typeof item.comments === "number" ? item.comments : 0;
-      // saved/shares: from Insights API (Business/Creator), null for personal accounts
-      const saved = item.saved ?? null;
-      const shares = item.shares ?? null;
+      const views = typeof item.views === "number" ? item.views : null;
+      const likes = typeof item.likes === "number" ? item.likes : null;
+      const comments = typeof item.comments === "number" ? item.comments : null;
+      const saved = typeof item.saved === "number" ? item.saved : null;
+      const shares = typeof item.shares === "number" ? item.shares : null;
+      const reach = typeof item.reach === "number" ? item.reach : null;
+      const impressions = typeof item.impressions === "number" ? item.impressions : null;
+
+      const metricsData = {
+        likes,
+        comments,
+        shares,
+        views,
+        saves: saved,
+        reach,
+        impressions,
+        followerCount: item.followerCount || null,
+        dataSource: "instagram_graph_api",
+        syncStatus: "success" as const,
+      };
+
+      const { score, engagementRate } = calculateUnifiedEngagement(metricsData);
+
+      console.log(`[Instagram] Authentication: SUCCESS`);
+      console.log(`[Instagram] Post: ${item.id}`);
+      console.log(`[Instagram] Likes: ${likes}`);
+      console.log(`[Instagram] Comments: ${comments}`);
+      console.log(`[Instagram] Shares: ${shares}`);
+      console.log(`[Instagram] Saves: ${saved}`);
+      console.log(`[Instagram] Reach: ${reach}`);
+      console.log(`[Instagram] Score: ${score}/100`);
 
       return {
         platformPostId: String(item.id),
@@ -110,14 +94,10 @@ export class InstagramSyncAdapter extends BasePlatformSyncAdapter {
         type,
         privacyStatus: "public",
         metrics: {
-          likes,
-          comments,
-          shares,
-          views,
-          saves: saved,
-          followerCount: item.followerCount || null,
+          ...metricsData,
+          engagementRate,
         },
-        uesScore: computeUES(views || 0, likes, comments, shares || 0),
+        uesScore: score,
         publishedAt: item.publishedAt ? new Date(item.publishedAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
       };
     });
@@ -126,19 +106,6 @@ export class InstagramSyncAdapter extends BasePlatformSyncAdapter {
   async createPost(uid: string, auth: AuthCheckResult, payload: CreatePostPayload): Promise<PublishResult> {
     if (!auth.valid || !auth.accessToken) {
       return { success: false, error: "Instagram authentication required" };
-    }
-
-    if (!payload.mediaUrl) {
-      return { success: false, error: "An image or video URL is required to publish to Instagram." };
-    }
-
-    if (auth.accessToken === "mock-access-token") {
-      const mockId = `ig-mock-${Date.now()}`;
-      return {
-        success: true,
-        platformPostId: mockId,
-        url: `https://instagram.com/p/${mockId}`,
-      };
     }
 
     try {

@@ -61,6 +61,10 @@ export function PlatformTrendChart() {
             <stop offset="0%" stopColor="#4ECDC4" stopOpacity={0.2} />
             <stop offset="100%" stopColor="#4ECDC4" stopOpacity={0} />
           </linearGradient>
+          <linearGradient id="fbGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#1877F2" stopOpacity={0.2} />
+            <stop offset="100%" stopColor="#1877F2" stopOpacity={0} />
+          </linearGradient>
         </defs>
         <CartesianGrid strokeDasharray="3 3" />
         <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} interval={3} />
@@ -68,8 +72,7 @@ export function PlatformTrendChart() {
         <Tooltip />
         <Area type="monotone" dataKey="instagram" stroke="#FF6B6B" strokeWidth={2} fill="url(#igGrad)" dot={false} name="Instagram" />
         <Area type="monotone" dataKey="youtube" stroke="#4ECDC4" strokeWidth={1.5} fill="none" dot={false} name="YouTube" />
-        <Area type="monotone" dataKey="x" stroke="rgba(247,255,247,0.5)" strokeWidth={1.5} fill="none" dot={false} name="X / Twitter" />
-        <Area type="monotone" dataKey="linkedin" stroke="rgba(78,205,196,0.6)" strokeWidth={1.5} fill="none" dot={false} name="LinkedIn" />
+        <Area type="monotone" dataKey="facebook" stroke="#1877F2" strokeWidth={1.5} fill="url(#fbGrad)" dot={false} name="Facebook" />
       </AreaChart>
     </ResponsiveContainer>
   );
@@ -77,16 +80,17 @@ export function PlatformTrendChart() {
 
 // ─── Score Band Bar Chart ─────────────────────────────────────────────────
 
-export function ScoreBandChart() {
+export function ScoreBandChart({ data }: { data?: any[] }) {
+  const chartData = data || SCORE_BANDS;
   return (
     <ResponsiveContainer width="100%" height={140}>
-      <BarChart data={SCORE_BANDS} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
+      <BarChart data={chartData} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" vertical={false} />
         <XAxis dataKey="range" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
         <YAxis tickLine={false} axisLine={false} />
         <Tooltip cursor={{ fill: "rgba(78,205,196,0.05)" }} />
         <Bar dataKey="count" radius={[6, 6, 0, 0]}>
-          {SCORE_BANDS.map((entry, index) => (
+          {chartData.map((entry, index) => (
             <Cell key={index} fill={entry.fill} />
           ))}
         </Bar>
@@ -125,23 +129,22 @@ export function PlatformPieChart() {
 
 // ─── Platform Bar Comparison ──────────────────────────────────────────────
 
-const PLATFORM_BAR_DATA = [
-  { name: "Instagram", score: 82, fill: "#FF6B6B" },
-  { name: "YouTube", score: 91, fill: "#4ECDC4" },
-  { name: "X / Twitter", score: 74, fill: "rgba(247,255,247,0.5)" },
-  { name: "LinkedIn", score: 88, fill: "rgba(78,205,196,0.7)" },
-];
+export function PlatformBarChart({ data = [] }: { data?: { name: string; score: number; fill: string }[] }) {
+  const chartData = data.length > 0 ? data : [
+    { name: "Instagram", score: 0, fill: "#FF6B6B" },
+    { name: "YouTube", score: 0, fill: "#4ECDC4" },
+    { name: "Facebook", score: 0, fill: "#1877F2" },
+  ];
 
-export function PlatformBarChart() {
   return (
     <ResponsiveContainer width="100%" height={180}>
-      <BarChart data={PLATFORM_BAR_DATA} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
+      <BarChart data={chartData} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" vertical={false} />
         <XAxis dataKey="name" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
         <YAxis domain={[0, 100]} tickLine={false} axisLine={false} />
         <Tooltip cursor={{ fill: "rgba(78,205,196,0.05)" }} />
         <Bar dataKey="score" radius={[6, 6, 0, 0]}>
-          {PLATFORM_BAR_DATA.map((entry, index) => (
+          {chartData.map((entry, index) => (
             <Cell key={index} fill={entry.fill} />
           ))}
         </Bar>

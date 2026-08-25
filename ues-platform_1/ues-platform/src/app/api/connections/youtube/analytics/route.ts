@@ -22,14 +22,10 @@ export async function GET(request: Request) {
 
     const refreshToken = typeof secrets.refreshToken === "string" ? secrets.refreshToken : undefined;
     const accessToken = typeof secrets.accessToken === "string" ? secrets.accessToken : null;
-    const isMockConnection = secrets.mockConnection === true || accessToken === "mock-access-token";
 
-    if (isMockConnection) {
-      return NextResponse.json(getMockYouTubeAnalytics());
-    }
 
-    if (!accessToken) {
-      return NextResponse.json({ connected: false, error: "No access token available" }, { status: 404 });
+    if (!accessToken || accessToken === "mock-access-token") {
+      return NextResponse.json({ connected: false, error: "YouTube authentication required (mock connections disabled)" }, { status: 401 });
     }
 
     try {

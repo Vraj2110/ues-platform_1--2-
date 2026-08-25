@@ -1,10 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
 import { formatNumber, getUESGradeColor } from "@/lib/data";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { useRealTimePosts } from "@/hooks/useRealTimePosts";
 import { getPlatformIcon } from "@/components/ui/PlatformIcons";
 
 const PLATFORM_ICONS: Record<string, string> = {
@@ -13,132 +11,118 @@ const PLATFORM_ICONS: Record<string, string> = {
   facebook: "📘",
 };
 
-export function PlatformPerformanceCards() {
-  const { allPosts } = useRealTimePosts();
+interface PlatformMetricsSummary {
+  platformId: string;
+  platformName: string;
+  ues: number | string;
+  followers: number | string;
+  engagementRate: string;
+  reach: number | string;
+  totalPosts: number;
+  impressions: number | string;
+  engagement: number;
+  change: string;
+}
 
-  const platformData = useMemo(() => {
-    const dataMap: Record<string, any> = {};
+interface PlatformPerformanceCardsProps {
+  breakdown: Record<string, PlatformMetricsSummary>;
+}
 
-    allPosts.forEach((post) => {
-      const plat = post.platform.toLowerCase();
-      if (!dataMap[plat]) {
-        dataMap[plat] = {
-          platformId: plat,
-          platformName: plat.charAt(0).toUpperCase() + plat.slice(1),
-          views: 0,
-          likes: 0,
-          comments: 0,
-          shares: 0,
-          uesTotal: 0,
-          postCount: 0,
-          followers: 0,
-        };
-      }
-      const pViews = Number(post.metrics.views) || 0;
-      const pLikes = Number(post.metrics.likes) || 0;
-      const pComments = Number(post.metrics.comments) || 0;
-      const pShares = Number(post.metrics.shares) || 0;
-      const pScore = Number(post.uesScore) || 0;
-      const pFollowers = Number(post.metrics.followerCount) || 0;
+export function PlatformPerformanceCards({ breakdown }: PlatformPerformanceCardsProps) {
+  const cardsData = Object.values(breakdown || {});
 
-      dataMap[plat].views += pViews;
-      dataMap[plat].likes += pLikes;
-      dataMap[plat].comments += pComments;
-      dataMap[plat].shares += pShares;
-      dataMap[plat].uesTotal += pScore;
-      dataMap[plat].postCount += 1;
-      
-      if (pFollowers > dataMap[plat].followers) {
-        dataMap[plat].followers = pFollowers;
-      }
-    });
-
-    return Object.values(dataMap).map((platData) => {
-      const engagement = platData.likes + platData.comments + platData.shares;
-      const reach = platData.views;
-      const impressions = Math.round(reach * 1.5);
-      const engagementRate = reach > 0 ? ((engagement / reach) * 100).toFixed(1) : "0.0";
-      const aiScore = platData.postCount > 0 ? Math.round(platData.uesTotal / platData.postCount) : 0;
-      
-      // Simulate growth metric based on hash of platform name for UI aesthetics
-      let hash = 0;
-      for (let i = 0; i < platData.platformId.length; i++) hash += platData.platformId.charCodeAt(i);
-      const growth = (hash % 15) - 3; // range -3 to +11
-
-      return {
-        platformId: platData.platformId,
-        platformName: platData.platformName === 'X' ? 'X / Twitter' : platData.platformName,
-        followers: platData.followers,
-        engagementRate,
-        reach,
-        posts: platData.postCount,
-        impressions,
-        engagement,
-        aiScore,
-        growth
-      };
-    }).sort((a, b) => b.aiScore - a.aiScore); // Sort by highest UES score
-  }, [allPosts]);
-
-  if (platformData.length === 0) {
+  if (cardsData.length === 0) {
     return null;
   }
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
-      {platformData.map((platform) => (
-        <Card key={platform.platformId} className="flex flex-col">
-          <div className="flex justify-between items-center mb-4">
-            <div className="flex items-center gap-2">
-              <span className="flex items-center min-h-[24px]">{getPlatformIcon(platform.platformId, "sm") || PLATFORM_ICONS[platform.platformId] || "📱"}</span>
-              <CardTitle className="mb-0">{platform.platformName}</CardTitle>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge variant={platform.growth > 0 ? "cyan" : "pink"}>
-                {platform.growth > 0 ? "↑" : "↓"} {Math.abs(platform.growth)}%
-              </Badge>
-              <div 
-                className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shadow-sm"
-                style={{ 
-                  backgroundColor: "rgba(0,0,0,0.2)", 
-                  color: getUESGradeColor(platform.aiScore),
-                  border: `1px solid ${getUESGradeColor(platform.aiScore)}` 
-                }}
-                title="AI Score"
-              >
-                {platform.aiScore}
+      {cardsData.map((platform) => {
+        const uesScore = typeof platform.ues === "number" ? platform.ues : 0;
+        const uesDisplay = platform.ues;
+        const followersDisplay = typeof platform.followers === "number" ? formatNumber(platform.followers) : platform.followers;
+        const reachDisplay = typeof platform.reach === "number" ? formatNumber(platform.reach) : platform.reach;
+        const impressionsDisplay = typeof platform.impressions === "number" ? formatNumber(platform.impressions) : platform.impressions;
+        const engagementDisplay = formatNumber(platform.engagement);
+        const hasGrowth = platform.change !== "N/A" && !platform.change.startsWith("-");
+        const changeDisplay = platform.change;
+
+        return (
+          <Card key={platform.platformId} className="flex flex-col">
+            <div className="flex justify-between items-center mb-4">
+              <div className="flex items-center gap-2">
+                <span className="flex items-center min-h-[24px]">
+                  {getPlatformIcon(platform.platformId, "sm") || PLATFORM_ICONS[platform.platformId] || "📱"}
+                </span>
+                <CardTitle className="mb-0">{platform.platformName}</CardTitle>
+              </div>
+              <div className="flex items-center gap-2">
+                {changeDisplay !== "N/A" && (
+                  <Badge variant={hasGrowth ? "cyan" : "pink"}>
+                    {hasGrowth ? "↑" : "↓"} {changeDisplay.replace(/[+-]/, "")}
+                  </Badge>
+                )}
+                {uesScore > 0 ? (
+                  <div 
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shadow-sm"
+                    style={{ 
+                      backgroundColor: "rgba(0,0,0,0.2)", 
+                      color: getUESGradeColor(uesScore),
+                      border: `1px solid ${getUESGradeColor(uesScore)}` 
+                    }}
+                    title="Platform UES Score"
+                  >
+                    {uesDisplay}
+                  </div>
+                ) : (
+                  <Badge variant="pink">N/A</Badge>
+                )}
               </div>
             </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-y-4 gap-x-2 text-sm mt-2">
-            <div>
-              <p className="text-[10px] uppercase text-mint-700 tracking-wider">Followers</p>
-              <p className="font-display font-bold text-[var(--color-mint)]">{formatNumber(platform.followers)}</p>
+            <div className="grid grid-cols-2 gap-4 mt-2 mb-4">
+              <div>
+                <p className="text-[10px] uppercase text-mint-700 tracking-wider font-semibold">
+                  {platform.platformId === "youtube" ? "Subscribers" : "Followers"}
+                </p>
+                <p className="text-xl font-display font-extrabold text-[var(--color-mint)] mt-1">
+                  {followersDisplay}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase text-mint-700 tracking-wider font-semibold">Engagement Rate</p>
+                <p className="text-xl font-display font-extrabold text-cyan-ues mt-1">
+                  {platform.engagementRate}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase text-mint-700 tracking-wider font-semibold">
+                  {platform.platformId === "youtube" ? "Total Views" : "Total Reach"}
+                </p>
+                <p className="text-xl font-display font-extrabold text-[var(--color-mint)] mt-1">
+                  {reachDisplay}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase text-mint-700 tracking-wider font-semibold">Total Posts</p>
+                <p className="text-xl font-display font-extrabold text-[var(--color-mint)] mt-1">
+                  {platform.totalPosts}
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-[10px] uppercase text-mint-700 tracking-wider">Engagement Rate</p>
-              <p className="font-display font-bold text-cyan-ues">{platform.engagementRate}%</p>
+
+            <div className="pt-3 border-t border-cyan-border/8 flex justify-between text-xs text-mint-700">
+              <span>Impressions: <strong className="text-[var(--color-mint)]">{impressionsDisplay}</strong></span>
+              <span>Engagement: <strong className="text-cyan-ues">{engagementDisplay}</strong></span>
             </div>
-            <div>
-              <p className="text-[10px] uppercase text-mint-700 tracking-wider">Reach</p>
-              <p className="font-display font-bold text-[var(--color-mint)]">{formatNumber(platform.reach)}</p>
+            
+            <div className="mt-2 text-[10px] text-mint-700 opacity-60 flex items-center justify-between">
+              <span>Source: {platform.platformId === "youtube" ? "YouTube Analytics" : "Meta Graph API"}</span>
+              <span>Status: Synchronized</span>
             </div>
-            <div>
-              <p className="text-[10px] uppercase text-mint-700 tracking-wider">Total Posts</p>
-              <p className="font-display font-bold text-[var(--color-mint)]">{platform.posts}</p>
-            </div>
-            <div>
-              <p className="text-[10px] uppercase text-mint-700 tracking-wider">Impressions</p>
-              <p className="font-display font-bold text-[var(--color-mint)]">{formatNumber(platform.impressions)}</p>
-            </div>
-            <div>
-              <p className="text-[10px] uppercase text-mint-700 tracking-wider">Engagement</p>
-              <p className="font-display font-bold text-[var(--color-mint)]">{formatNumber(platform.engagement)}</p>
-            </div>
-          </div>
-        </Card>
-      ))}
+          </Card>
+        );
+      })}
     </div>
   );
 }

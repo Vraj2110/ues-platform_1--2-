@@ -1,91 +1,64 @@
 "use client";
 
-import { useMemo } from "react";
 import { formatNumber } from "@/lib/data";
-import { useRealTimePosts } from "@/hooks/useRealTimePosts";
 
-export function GlobalOverviewWidget() {
-  const { allPosts } = useRealTimePosts();
+interface OverviewData {
+  totalFollowers: number;
+  totalReach: number | string;
+  totalImpressions: number | string;
+  totalEngagement: number;
+  engagementRate: string;
+  totalPosts: number;
+  averageScore: number;
+  bestPlatform: string;
+}
 
-  const data = useMemo(() => {
-    let totalFollowers = 0;
-    let totalViews = 0;
-    let totalLikes = 0;
-    let totalComments = 0;
-    let totalShares = 0;
-    let sumUES = 0;
+interface GlobalOverviewWidgetProps {
+  overview: OverviewData;
+}
 
-    const platformFollowers: Record<string, number> = {};
-    const platformScores: Record<string, { total: number; count: number }> = {};
-
-    allPosts.forEach((post) => {
-      const pViews = Number(post.metrics.views) || 0;
-      const pLikes = Number(post.metrics.likes) || 0;
-      const pComments = Number(post.metrics.comments) || 0;
-      const pShares = Number(post.metrics.shares) || 0;
-      const pScore = Number(post.uesScore) || 0;
-      const pFollowers = Number(post.metrics.followerCount) || 0;
-
-      totalViews += pViews;
-      totalLikes += pLikes;
-      totalComments += pComments;
-      totalShares += pShares;
-      sumUES += pScore;
-
-      if (!platformScores[post.platform]) {
-        platformScores[post.platform] = { total: 0, count: 0 };
-      }
-      platformScores[post.platform].total += pScore;
-      platformScores[post.platform].count += 1;
-
-      if (pFollowers > 0) {
-        if (!platformFollowers[post.platform] || pFollowers > platformFollowers[post.platform]) {
-          platformFollowers[post.platform] = pFollowers;
-        }
-      }
-    });
-
-    totalFollowers = Object.values(platformFollowers).reduce((acc, count) => acc + Number(count), 0);
-
-    const totalPosts = allPosts.length;
-    const totalEngagement = totalLikes + totalComments + totalShares;
-    const totalReach = totalViews;
-    const totalImpressions = Math.round(totalViews * 1.5); // Derived heuristic
-
-    const engagementRate = totalReach > 0 ? ((totalEngagement / totalReach) * 100).toFixed(1) : "0.0";
-    const averageScore = totalPosts > 0 ? Math.round(sumUES / totalPosts) : 0;
-
-    let bestPlatform = "None";
-    let maxScore = 0;
-    Object.keys(platformScores).forEach((plat) => {
-      const avg = platformScores[plat].total / platformScores[plat].count;
-      if (avg > maxScore) {
-        maxScore = avg;
-        bestPlatform = plat.charAt(0).toUpperCase() + plat.slice(1);
-      }
-    });
-
-    return {
-      totalFollowers,
-      totalReach,
-      totalImpressions,
-      totalEngagement,
-      engagementRate,
-      totalPosts,
-      averageScore,
-      bestPlatform,
-    };
-  }, [allPosts]);
-
+export function GlobalOverviewWidget({ overview }: GlobalOverviewWidgetProps) {
   const stats = [
-    { label: "Total Followers", value: formatNumber(data.totalFollowers), color: "text-[var(--color-mint)]" },
-    { label: "Total Reach", value: formatNumber(data.totalReach), color: "text-[var(--color-mint)]" },
-    { label: "Total Impressions", value: formatNumber(data.totalImpressions), color: "text-[var(--color-mint)]" },
-    { label: "Total Engagement", value: formatNumber(data.totalEngagement), color: "text-[var(--color-mint)]" },
-    { label: "Overall Engagement Rate", value: `${data.engagementRate}%`, color: "text-cyan-ues" },
-    { label: "Total Posts", value: data.totalPosts, color: "text-[var(--color-mint)]" },
-    { label: "Avg Performance Score", value: data.averageScore, color: "text-cyan-ues" },
-    { label: "Best Platform", value: data.bestPlatform, color: "text-[var(--color-mint)]" },
+    { 
+      label: "Total Followers", 
+      value: typeof overview.totalFollowers === "number" ? formatNumber(overview.totalFollowers) : overview.totalFollowers, 
+      color: "text-[var(--color-mint)]" 
+    },
+    { 
+      label: "Total Reach", 
+      value: typeof overview.totalReach === "number" ? formatNumber(overview.totalReach) : overview.totalReach, 
+      color: "text-[var(--color-mint)]" 
+    },
+    { 
+      label: "Total Impressions", 
+      value: typeof overview.totalImpressions === "number" ? formatNumber(overview.totalImpressions) : overview.totalImpressions, 
+      color: "text-[var(--color-mint)]" 
+    },
+    { 
+      label: "Total Engagement", 
+      value: typeof overview.totalEngagement === "number" ? formatNumber(overview.totalEngagement) : overview.totalEngagement, 
+      color: "text-[var(--color-mint)]" 
+    },
+    { 
+      label: "Overall Engagement Rate", 
+      value: overview.engagementRate, 
+      color: "text-cyan-ues" 
+    },
+    { 
+      label: "Total Posts", 
+      value: overview.totalPosts, 
+      color: "text-[var(--color-mint)]" 
+    },
+    { 
+      label: "Avg Performance Score", 
+      value: overview.averageScore, 
+      color: "text-cyan-ues" 
+    },
+    { 
+      label: "Best Platform", 
+      value: overview.bestPlatform, 
+      color: "text-[var(--color-mint)]" 
+    },
   ];
 
   return (

@@ -230,29 +230,28 @@ export const METRIC_WEIGHTS: MetricWeight[] = [
 // ─── Time Series ───────────────────────────────────────────────────────────
 
 export const TIME_SERIES: TimeSeriesDataPoint[] = [
-  { date: "Mar 1", ues: 76, instagram: 72, youtube: 80, x: 68, linkedin: 78 },
-  { date: "Mar 2", ues: 74, instagram: 70, youtube: 78, x: 65, linkedin: 76 },
-  { date: "Mar 3", ues: 79, instagram: 75, youtube: 84, x: 70, linkedin: 80 },
-  { date: "Mar 4", ues: 77, instagram: 73, youtube: 82, x: 67, linkedin: 79 },
-  { date: "Mar 5", ues: 82, instagram: 78, youtube: 90, x: 72, linkedin: 83 },
-  { date: "Mar 6", ues: 80, instagram: 76, youtube: 88, x: 70, linkedin: 82 },
-  { date: "Mar 7", ues: 78, instagram: 74, youtube: 85, x: 68, linkedin: 80 },
-  { date: "Mar 8", ues: 81, instagram: 77, youtube: 87, x: 71, linkedin: 82 },
-  { date: "Mar 9", ues: 83, instagram: 79, youtube: 89, x: 73, linkedin: 84 },
-  { date: "Mar 10", ues: 80, instagram: 76, youtube: 86, x: 70, linkedin: 81 },
-  { date: "Mar 11", ues: 85, instagram: 80, youtube: 92, x: 74, linkedin: 86 },
-  { date: "Mar 12", ues: 83, instagram: 78, youtube: 90, x: 72, linkedin: 84 },
-  { date: "Mar 13", ues: 87, instagram: 82, youtube: 93, x: 76, linkedin: 88 },
-  { date: "Mar 14", ues: 84, instagram: 80, youtube: 91, x: 74, linkedin: 85 },
+  { date: "Mar 1", ues: 76, instagram: 72, youtube: 80, facebook: 76 },
+  { date: "Mar 2", ues: 74, instagram: 70, youtube: 78, facebook: 74 },
+  { date: "Mar 3", ues: 79, instagram: 75, youtube: 84, facebook: 78 },
+  { date: "Mar 4", ues: 77, instagram: 73, youtube: 82, facebook: 77 },
+  { date: "Mar 5", ues: 82, instagram: 78, youtube: 90, facebook: 80 },
+  { date: "Mar 6", ues: 80, instagram: 76, youtube: 88, facebook: 79 },
+  { date: "Mar 7", ues: 78, instagram: 74, youtube: 85, facebook: 78 },
+  { date: "Mar 8", ues: 81, instagram: 77, youtube: 87, facebook: 81 },
+  { date: "Mar 9", ues: 83, instagram: 79, youtube: 89, facebook: 82 },
+  { date: "Mar 10", ues: 80, instagram: 76, youtube: 86, facebook: 80 },
+  { date: "Mar 11", ues: 85, instagram: 80, youtube: 92, facebook: 84 },
+  { date: "Mar 12", ues: 83, instagram: 78, youtube: 90, facebook: 83 },
+  { date: "Mar 13", ues: 87, instagram: 82, youtube: 93, facebook: 85 },
+  { date: "Mar 14", ues: 84, instagram: 80, youtube: 91, facebook: 84 },
 ];
 
 // ─── Platform Distribution ─────────────────────────────────────────────────
 
 export const PLATFORM_DISTRIBUTION: PlatformDistribution[] = [
-  { platform: "Instagram", count: 48, percentage: 38, color: "#FF6B6B" },
-  { platform: "YouTube", count: 31, percentage: 24, color: "#4ECDC4" },
-  { platform: "X / Twitter", count: 28, percentage: 22, color: "rgba(247,255,247,0.5)" },
-  { platform: "LinkedIn", count: 20, percentage: 16, color: "rgba(78,205,196,0.6)" },
+  { platform: "Instagram", count: 48, percentage: 46, color: "#FF6B6B" },
+  { platform: "YouTube", count: 31, percentage: 30, color: "#4ECDC4" },
+  { platform: "Facebook", count: 25, percentage: 24, color: "#1877F2" },
 ];
 
 // ─── Score Bands ───────────────────────────────────────────────────────────

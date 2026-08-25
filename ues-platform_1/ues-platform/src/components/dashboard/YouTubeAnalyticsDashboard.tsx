@@ -105,10 +105,10 @@ export default function YouTubeAnalyticsDashboard() {
   const statCards = useMemo(() => {
     if (!data) return [];
     return [
-      { label: "Views", value: formatNumber(data.totals.views), change: "+12% vs last period" },
-      { label: "Watch time", value: formatNumber(data.totals.estimatedMinutesWatched), change: "Minutes watched" },
-      { label: "Subscribers", value: formatNumber(data.totals.subscribersGained), change: "Gained" },
-      { label: "Likes", value: formatNumber(data.totals.likes), change: "Engagement" },
+      { label: "Views", value: formatNumber(data.totals.views), change: "Total views this period" },
+      { label: "Watch time", value: formatNumber(data.totals.estimatedMinutesWatched), change: "Total minutes watched" },
+      { label: "Subscribers", value: formatNumber(data.totals.subscribersGained), change: "Total subscribers gained" },
+      { label: "Likes", value: formatNumber(data.totals.likes), change: "Total likes received" },
     ];
   }, [data]);
 

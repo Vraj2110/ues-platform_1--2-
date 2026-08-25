@@ -38,8 +38,14 @@ export interface PostMetrics {
   shares?: number | null;
   views?: number | null;
   saves?: number | null;
+  reach?: number | null;
+  impressions?: number | null;
+  engagementRate?: number | null;
   followerCount?: number | null;
   metricsUpdatedAt?: string;
+  dataSource?: string;
+  syncStatus?: "success" | "failed" | "auth_required";
+  errorMessage?: string;
 }
 
 export interface AIAnalysis {
@@ -187,7 +193,7 @@ export interface DashboardStat {
   unit?: string;
   change?: string;
   changeDirection?: "up" | "down" | "neutral";
-  icon: string;
+  icon: any;
   iconBg?: string;
 }
 

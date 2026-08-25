@@ -20,7 +20,7 @@ export async function GET(request: Request) {
     const isMockConnection = secrets.mockConnection === true || accessToken === "mock-access-token" || accessToken === "connected-access-token";
 
     if (isMockConnection) {
-      return NextResponse.json({ ...getMockYouTubeVideos(), connected: true });
+      return NextResponse.json({ videos: [], connected: false, error: "YouTube authentication required" }, { status: 200 });
     }
 
     try {
@@ -60,8 +60,8 @@ export async function GET(request: Request) {
       }
       return NextResponse.json({ videos: [], connected: true });
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error("YouTube videos route error", error);
-    return NextResponse.json({ ...getMockYouTubeVideos(), connected: true });
+    return NextResponse.json({ videos: [], connected: false, error: error.message || "Failed to fetch YouTube videos" }, { status: 500 });
   }
 }

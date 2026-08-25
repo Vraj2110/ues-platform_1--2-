@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { auth } from "@/lib/firebase";
 import { POSTS } from "@/lib/data";
+import { calculateUnifiedEngagement } from "@/lib/server/uesService";
 import type { Post } from "@/types";
 
 export function useRealTimePosts() {
@@ -88,23 +89,24 @@ export function useRealTimePosts() {
           .filter((v: any) => !deletedIds.has(v.id))
           .filter((v: any) => !v.privacyStatus || v.privacyStatus === "public")
           .map((v: any, index: number) => {
-            const realViews = typeof v.views === "number" ? v.views : 0;
-            const realLikes = typeof v.likes === "number" ? v.likes : 0;
-            const realComments = typeof v.comments === "number" ? v.comments : 0;
+            const views = typeof v.views === "number" ? v.views : null;
+            const likes = typeof v.likes === "number" ? v.likes : null;
+            const comments = typeof v.comments === "number" ? v.comments : null;
 
-            const uesScore =
-              realViews > 0
-                ? Math.min(
-                    99,
-                    Math.max(
-                      65,
-                      Math.round(
-                        Math.log10(realViews + 1) * 14 +
-                          ((realLikes * 3 + realComments * 6) / (realViews + 1)) * 40
-                      )
-                    )
-                  )
-                : 85 + (index % 5);
+            const metricsData = {
+              likes,
+              comments,
+              shares: null,
+              views,
+              saves: null,
+              reach: null,
+              impressions: null,
+              followerCount: v.followerCount || null,
+              dataSource: "youtube_api",
+              syncStatus: "success" as const,
+            };
+
+            const { score, engagementRate } = calculateUnifiedEngagement(metricsData);
 
             return {
               id: `yt-live-${v.id || index}`,
@@ -116,14 +118,10 @@ export function useRealTimePosts() {
               status: "active" as const,
               privacyStatus: "public",
               metrics: {
-                likes: realLikes,
-                comments: realComments,
-                shares: Math.round(realLikes * 0.15),
-                views: realViews,
-                saves: 0,
-                followerCount: v.followerCount || 0,
+                ...metricsData,
+                engagementRate,
               },
-              uesScore,
+              uesScore: score,
               publishedAt: v.publishedAt ? new Date(v.publishedAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
             } as Post;
           });
