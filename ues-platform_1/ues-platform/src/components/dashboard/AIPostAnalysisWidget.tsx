@@ -6,14 +6,12 @@ import { Card, CardTitle, CardHeader, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { useRealTimePosts } from "@/hooks/useRealTimePosts";
 import type { Post, AIAnalysis } from "@/types";
+import { getPlatformIcon } from "@/components/ui/PlatformIcons";
 
 const PLATFORM_ICONS: Record<string, string> = {
   instagram: "📸",
   youtube: "▶️",
-  x: "🐦",
   facebook: "📘",
-  linkedin: "💼",
-  threads: "🧵",
 };
 
 // Simple deterministic hash based on post ID
@@ -112,7 +110,7 @@ export function AIPostAnalysisWidget() {
                 onClick={() => setSelectedPost(isExpanded ? null : post.id)}
               >
                 <div className="flex items-center gap-3 overflow-hidden">
-                  <span className="text-2xl flex-shrink-0">{PLATFORM_ICONS[post.platform] || "📱"}</span>
+                  <span className="flex items-center justify-center min-h-[28px] flex-shrink-0">{getPlatformIcon(post.platform, "sm") || PLATFORM_ICONS[post.platform] || "📱"}</span>
                   <div className="overflow-hidden">
                     <p className="font-medium text-[var(--color-mint)] truncate text-sm">{post.title}</p>
                     <p className="text-xs text-mint-700 capitalize mt-1">

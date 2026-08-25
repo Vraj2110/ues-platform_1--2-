@@ -3,13 +3,14 @@
 import { Card, CardTitle, CardSubtitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { useRealTimePosts } from "@/hooks/useRealTimePosts";
+import { getPlatformIcon } from "@/components/ui/PlatformIcons";
 
 const platformIcons: Record<string, string> = {
-  instagram: "📸", youtube: "▶️", x: "🐦", twitter: "🐦", linkedin: "💼", tiktok: "🎵", facebook: "📘", threads: "🧵"
+  instagram: "📸", youtube: "▶️", facebook: "📘"
 };
 
 const platformNames: Record<string, string> = {
-  instagram: "Instagram", youtube: "YouTube", x: "X / Twitter", twitter: "X / Twitter", linkedin: "LinkedIn", tiktok: "TikTok", facebook: "Facebook", threads: "Threads"
+  instagram: "Instagram", youtube: "YouTube", facebook: "Facebook"
 };
 
 const scoreColor = (s: number) => s >= 70 ? "#4ECDC4" : "#FF6B6B";
@@ -36,8 +37,8 @@ export function TopPostsWidget() {
             <span className="font-display font-extrabold text-lg text-mint-300 w-6">
               {i + 1}
             </span>
-            <div className="w-9 h-9 rounded-lg bg-teal-card flex items-center justify-center text-xl flex-shrink-0">
-              {platformIcons[post.platform] || "📄"}
+            <div className="w-9 h-9 rounded-lg bg-teal-card flex items-center justify-center flex-shrink-0">
+              {getPlatformIcon(post.platform, "sm") || platformIcons[post.platform] || "📄"}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{post.title}</p>

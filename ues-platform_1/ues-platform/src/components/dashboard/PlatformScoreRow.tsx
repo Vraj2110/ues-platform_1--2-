@@ -1,4 +1,5 @@
 import type { Platform } from "@/types";
+import { getPlatformIcon } from "@/components/ui/PlatformIcons";
 
 interface PlatformScoreRowProps {
   platform: Platform;
@@ -7,8 +8,7 @@ interface PlatformScoreRowProps {
 const colorMap: Record<string, string> = {
   instagram: "#FF6B6B",
   youtube: "#4ECDC4",
-  twitter: "rgba(247,255,247,0.6)",
-  linkedin: "rgba(78,205,196,0.7)",
+  facebook: "#1877F2",
 };
 
 export function PlatformScoreRow({ platform }: PlatformScoreRowProps) {
@@ -17,7 +17,9 @@ export function PlatformScoreRow({ platform }: PlatformScoreRowProps) {
 
   return (
     <div className="flex items-center gap-3">
-      <span className="text-lg w-7 text-center leading-none">{platform.icon}</span>
+      <span className="w-7 flex items-center justify-center min-h-[20px]">
+        {getPlatformIcon(platform.id, "sm") || platform.icon}
+      </span>
       <span className="text-sm flex-1">{platform.name}</span>
       <div className="flex-[2] h-1.5 bg-mint-50 rounded-full overflow-hidden">
         <div

@@ -25,7 +25,6 @@ const PLATFORM_FILTERS = [
   { label: "All Platforms", value: "all" },
   { label: "YouTube", value: "youtube" },
   { label: "Facebook", value: "facebook" },
-  { label: "Threads", value: "threads" },
   { label: "Instagram", value: "instagram" },
 ];
 
@@ -148,7 +147,7 @@ export default function ContentPage() {
               <span className="animate-spin">🔄</span> Synchronizing connected platforms & updating database...
             </div>
             <p className="text-xs text-mint-600">
-              Fetching latest posts from YouTube, Instagram, Threads, and Facebook. Please wait.
+              Fetching latest posts from YouTube, Instagram, and Facebook. Please wait.
             </p>
           </div>
         )}

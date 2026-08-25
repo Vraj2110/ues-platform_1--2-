@@ -5,15 +5,12 @@ import { formatNumber, getUESGradeColor } from "@/lib/data";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { useRealTimePosts } from "@/hooks/useRealTimePosts";
+import { getPlatformIcon } from "@/components/ui/PlatformIcons";
 
 const PLATFORM_ICONS: Record<string, string> = {
   instagram: "📸",
   youtube: "▶️",
-  x: "🐦",
-  twitter: "🐦",
   facebook: "📘",
-  linkedin: "💼",
-  threads: "🧵",
 };
 
 export function PlatformPerformanceCards() {
@@ -93,7 +90,7 @@ export function PlatformPerformanceCards() {
         <Card key={platform.platformId} className="flex flex-col">
           <div className="flex justify-between items-center mb-4">
             <div className="flex items-center gap-2">
-              <span className="text-xl">{PLATFORM_ICONS[platform.platformId] || "📱"}</span>
+              <span className="flex items-center min-h-[24px]">{getPlatformIcon(platform.platformId, "sm") || PLATFORM_ICONS[platform.platformId] || "📱"}</span>
               <CardTitle className="mb-0">{platform.platformName}</CardTitle>
             </div>
             <div className="flex items-center gap-2">

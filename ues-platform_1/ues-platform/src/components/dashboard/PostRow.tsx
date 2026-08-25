@@ -1,25 +1,18 @@
 import { Badge } from "@/components/ui/Badge";
 import { formatNumber } from "@/lib/data";
 import type { Post } from "@/types";
+import { getPlatformIcon } from "@/components/ui/PlatformIcons";
 
 const platformIcons: Record<string, string> = {
   instagram: "📸",
   youtube: "▶️",
-  x: "🐦",
-  linkedin: "💼",
-  tiktok: "🎵",
   facebook: "📘",
-  threads: "🧵",
 };
 
 const platformNames: Record<string, string> = {
   instagram: "Instagram",
   youtube: "YouTube",
-  x: "X / Twitter",
-  linkedin: "LinkedIn",
-  tiktok: "TikTok",
   facebook: "Facebook",
-  threads: "Threads",
 };
 
 const typeVariant: Record<string, "cyan" | "pink" | "teal"> = {
@@ -66,7 +59,7 @@ export function PostRow({ post, onDelete }: PostRowProps) {
     >
       <td className="px-4 py-3.5 text-sm">
         <div className="flex items-center gap-2">
-          <span className="text-lg">{platformIcons[post.platform]}</span>
+          <span className="flex items-center min-h-[20px]">{getPlatformIcon(post.platform, "sm") || platformIcons[post.platform]}</span>
           <span className="text-mint-700 font-medium">{platformNames[post.platform]}</span>
         </div>
       </td>

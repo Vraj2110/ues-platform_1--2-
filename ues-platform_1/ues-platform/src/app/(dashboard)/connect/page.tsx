@@ -7,9 +7,6 @@ import type { Platform } from "@/types";
 const PLATFORMS: Platform[] = [
   { id: 'youtube', name: 'YouTube', icon: '📺', color: 'bg-red-500', connected: false },
   { id: 'instagram', name: 'Instagram', icon: '📸', color: 'bg-pink-500', connected: false },
-  { id: 'threads', name: 'Threads', icon: '🧵', color: 'bg-emerald-600', connected: false },
-  { id: 'linkedin', name: 'LinkedIn', icon: '💼', color: 'bg-blue-600', connected: false },
-  { id: 'tiktok', name: 'TikTok', icon: '🎵', color: 'bg-gray-800', connected: false },
   { id: 'facebook', name: 'Facebook', icon: '👍', color: 'bg-indigo-600', connected: false },
 ];
 

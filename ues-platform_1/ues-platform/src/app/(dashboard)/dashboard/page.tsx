@@ -16,8 +16,6 @@ const PLATFORM_META: Record<string, { name: string; icon: string; color: string 
   instagram: { name: "Instagram", icon: "📸", color: "#FF6B6B" },
   youtube: { name: "YouTube", icon: "▶️", color: "#4ECDC4" },
   facebook: { name: "Facebook", icon: "📘", color: "#1877F2" },
-  linkedin: { name: "LinkedIn", icon: "💼", color: "rgba(78,205,196,0.7)" },
-  threads: { name: "Threads", icon: "🧵", color: "#000000" },
 };
 
 export default function DashboardPage() {

@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { Badge, ConnectedBadge } from "@/components/ui/Badge";
 import { auth } from "@/lib/firebase";
 import type { Platform } from "@/types";
+import { getPlatformIcon } from "@/components/ui/PlatformIcons";
 
 export default function ConnectClient({ platforms }: { platforms: Platform[] }) {
   const [connections, setConnections] = useState<Record<string, any>>({});
@@ -232,9 +233,6 @@ export default function ConnectClient({ platforms }: { platforms: Platform[] }) 
   const PLATFORM_DESC: Record<string, string> = {
     instagram: "Likes, comments, saves, reach, and story views normalized to UES.",
     youtube: "Views, likes, comments, watch time, and subscriber delta.",
-    threads: "Likes, replies, views, and reposts normalized to UES.",
-    linkedin: "Reactions, comments, shares, impressions, and click-through.",
-    tiktok: "Views, likes, comments, shares, and completion rate.",
     facebook: "Reactions, comments, shares, reach, and page engagement.",
   };
 
@@ -270,7 +268,7 @@ export default function ConnectClient({ platforms }: { platforms: Platform[] }) 
               key={platform.id}
               className={connected ? "border-cyan-border/35 bg-cyan-light/[0.04]" : ""}
             >
-              <div className="text-4xl mb-3">{platform.icon}</div>
+              <div className="mb-3 flex items-center justify-start min-h-[40px]">{getPlatformIcon(platform.id, "lg") || platform.icon}</div>
               <div className="flex items-center gap-2 mb-2">
                 <h3 className="font-display font-bold text-base">{platform.name}</h3>
                 {connected && platform.id === "youtube" && <ConnectedBadge />}
