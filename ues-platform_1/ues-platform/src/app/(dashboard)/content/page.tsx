@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -34,10 +34,16 @@ const scoreColor = (s: number) =>
   s >= 85 ? "#4ECDC4" : s >= 70 ? "#4ECDC4" : s >= 55 ? "rgba(247,255,247,0.7)" : "#FF6B6B";
 
 export default function ContentPage() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const {
     allPosts,
     checkingYoutubeConnection,
     platformErrors,
+    deletePost,
   } = useRealTimePosts();
 
   const [filter, setFilter] = useState("all");
@@ -65,6 +71,23 @@ export default function ContentPage() {
     acc[platformKey] = (acc[platformKey] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
+
+  if (!mounted) {
+    return (
+      <div className="page-enter">
+        <PageHeader
+          title="Posts / Content"
+          subtitle="Tracked content across all connected platforms"
+        />
+        <div className="px-9 pb-9">
+          <div className="flex items-center gap-3 mb-6 text-sm text-mint-700">
+            <div className="w-4 h-4 border-2 border-cyan-ues border-t-transparent rounded-full animate-spin" />
+            Loading content...
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="page-enter">
@@ -109,6 +132,7 @@ export default function ContentPage() {
               <button
                 key={f.value}
                 onClick={() => setFilter(f.value)}
+                suppressHydrationWarning
                 className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 border ${
                   filter === f.value
                     ? "bg-cyan-mid text-cyan-ues shadow-sm border-cyan-ues"
@@ -116,7 +140,7 @@ export default function ContentPage() {
                 }`}
               >
                 {f.value !== "all" && PLATFORM_META[f.value]?.icon + " "}{f.label}
-                {` (${count})`}
+                {mounted ? ` (${count})` : ""}
               </button>
             );
           })}
@@ -237,8 +261,21 @@ export default function ContentPage() {
                         {meta.icon} {meta.label}
                       </span>
                     </div>
-                    {/* UES Score overlay */}
-                    <div className="absolute top-3 right-3">
+                    {/* Delete Button & UES Score overlay */}
+                    <div className="absolute top-3 right-3 flex items-center gap-2">
+                      <button
+                        type="button"
+                        title="Delete post from app and origin platform"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm("Are you sure you want to delete this post from your feed?")) {
+                            deletePost(post.id, post.platform);
+                          }
+                        }}
+                        className="w-9 h-9 rounded-full text-xs backdrop-blur-md bg-black/60 text-pink-ues hover:bg-pink-ues hover:text-white transition-all flex items-center justify-center shadow-md z-10 border border-pink-ues/30"
+                      >
+                        🗑️
+                      </button>
                       <span
                         className="inline-flex items-center justify-center w-10 h-10 rounded-full font-display font-extrabold text-sm backdrop-blur-md shadow-sm"
                         style={{

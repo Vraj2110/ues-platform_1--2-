@@ -1,4 +1,3 @@
-import { cn } from "@/lib/utils";
 import type { Platform } from "@/types";
 
 interface PlatformScoreRowProps {

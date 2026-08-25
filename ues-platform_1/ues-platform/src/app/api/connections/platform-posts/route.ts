@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { verifyIdToken } from "@/lib/server/auth";
-import { getUserConnections, getUserConnectionSecrets, setUserConnectionSecrets } from "@/lib/server/connections";
+import { getUserConnections, getUserConnectionSecrets, setUserConnectionSecrets, getDeletedPostIds, syncCustomPostsWithLiveOrigin } from "@/lib/server/connections";
 import { refreshTwitterToken } from "@/lib/server/publishService";
 import {
   fetchTwitterRecentTweets,
@@ -194,6 +194,8 @@ export async function GET(request: Request) {
 
               if (Array.isArray(tweets) && tweets.length > 0) {
                 fetched = true;
+                const activeIds = tweets.map((t: any) => String(t.id));
+                try { syncCustomPostsWithLiveOrigin(uid, "x", activeIds); } catch {}
                 tweets.forEach((tweet: any) => {
                   posts.push({
                     id: `x-live-${tweet.id}`,
@@ -228,9 +230,13 @@ export async function GET(request: Request) {
           } else if (platformId === "instagram") {
             try {
               if (!conn?.accountId) throw new Error("Missing Instagram account ID");
-              const media = await fetchInstagramRecentMedia(conn.accountId, accessToken, 20);
+              const media = await fetchInstagramRecentMedia(conn.accountId, accessToken, 100);
               if (Array.isArray(media)) {
                 fetched = true;
+                const activeIds = media.map((m: any) => String(m.id));
+                try {
+                  syncCustomPostsWithLiveOrigin(uid, "instagram", activeIds);
+                } catch {}
                 media.forEach((item: any) => {
                   const type =
                     item.mediaType === "VIDEO" ? "video" :
@@ -270,7 +276,8 @@ export async function GET(request: Request) {
               const fbPosts = await fetchFacebookRecentPosts(accessToken, 20);
               if (Array.isArray(fbPosts)) {
                 fetched = true;
-                
+                const activeIds = fbPosts.map((item: any) => String(item.id));
+                try { syncCustomPostsWithLiveOrigin(uid, "facebook", activeIds); } catch {}
                 fbPosts.forEach((item: any) => {
                   const viewEstimate = (item.likes || 0) * 8 + (item.shares || 0) * 15;
                   posts.push({
@@ -308,6 +315,8 @@ export async function GET(request: Request) {
               const liPosts = await fetchLinkedInRecentPosts(accessToken);
               if (Array.isArray(liPosts)) {
                 fetched = true;
+                const activeIds = liPosts.map((item: any) => String(item.id));
+                try { syncCustomPostsWithLiveOrigin(uid, "linkedin", activeIds); } catch {}
                 liPosts.forEach((item: any) => {
                   posts.push({
                     id: `li-live-${item.id}`,
@@ -344,6 +353,8 @@ export async function GET(request: Request) {
               const threadPosts = await fetchThreadsRecentPosts(accessToken, 20);
               if (Array.isArray(threadPosts)) {
                 fetched = true;
+                const activeIds = threadPosts.map((item: any) => String(item.id));
+                try { syncCustomPostsWithLiveOrigin(uid, "threads", activeIds); } catch {}
                 threadPosts.forEach((item: any) => {
                   posts.push({
                     id: `th-live-${item.id}`,
@@ -376,7 +387,7 @@ export async function GET(request: Request) {
             }
           }
 
-          if (!fetched && isMock) {
+          if (!fetched) {
             posts.push(...getConnectedFallbackPosts(platformId, accountName));
           }
         } catch (err) {
@@ -388,7 +399,13 @@ export async function GET(request: Request) {
 
     await Promise.all(platformTasks);
 
-    return NextResponse.json({ posts, errors: platformErrors });
+    const deletedSet = getDeletedPostIds(uid);
+    const activePosts = posts.filter((p) => {
+      const rawId = p.id.replace(/^(ig-live-|yt-live-|x-live-|fb-live-|li-live-|th-live-|ig-|yt-|x-|fb-|li-|th-)/, "");
+      return !deletedSet.has(p.id) && !deletedSet.has(rawId);
+    });
+
+    return NextResponse.json({ posts: activePosts, errors: platformErrors });
   } catch (error) {
     console.error("platform-posts route error:", error);
     return NextResponse.json({ posts: [], errors: ["Internal server error"] });

@@ -41,7 +41,7 @@ export async function GET(request: Request) {
         const liveVideoIds = publicVideos.map((v: any) => v.id).filter(Boolean);
         try {
           const { syncCustomPostsWithLiveOrigin } = await import("@/lib/server/connections");
-          syncCustomPostsWithLiveOrigin(uid, liveVideoIds);
+          syncCustomPostsWithLiveOrigin(uid, "youtube", liveVideoIds);
         } catch {}
         return NextResponse.json({ videos: publicVideos, connected: true });
       }
@@ -63,7 +63,7 @@ export async function GET(request: Request) {
               const liveVideoIds = publicVideos.map((v: any) => v.id).filter(Boolean);
               try {
                 const { syncCustomPostsWithLiveOrigin } = await import("@/lib/server/connections");
-                syncCustomPostsWithLiveOrigin(uid, liveVideoIds);
+                syncCustomPostsWithLiveOrigin(uid, "youtube", liveVideoIds);
               } catch {}
               return NextResponse.json({ videos: publicVideos, connected: true });
             }

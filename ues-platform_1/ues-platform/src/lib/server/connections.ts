@@ -10,6 +10,7 @@ interface ConnectionStore {
   secrets: Record<string, Record<string, Record<string, unknown>>>;
   analytics: Record<string, Record<string, unknown>>;
   customPosts?: Record<string, any[]>;
+  deletedPosts?: Record<string, string[]>;
 }
 
 function loadStore(): ConnectionStore {
@@ -22,12 +23,13 @@ function loadStore(): ConnectionStore {
         secrets: parsed.secrets || {},
         analytics: parsed.analytics || {},
         customPosts: parsed.customPosts || {},
+        deletedPosts: parsed.deletedPosts || {},
       };
     }
   } catch (err) {
     console.warn("Could not load connection store file:", err);
   }
-  return { connections: {}, secrets: {}, analytics: {}, customPosts: {} };
+  return { connections: {}, secrets: {}, analytics: {}, customPosts: {}, deletedPosts: {} };
 }
 
 function saveStore(store: ConnectionStore) {
@@ -64,8 +66,12 @@ function getMemorySecrets(uid: string) {
 }
 
 export async function getUserConnections(uid: string): Promise<Record<string, PlatformConnection>> {
+  const fileConns = getMemoryConnections(uid);
+  const demoConns = uid !== "demo-user" ? getMemoryConnections("demo-user") : {};
+  const combinedMemory = { ...demoConns, ...fileConns };
+
   if (!isFirebaseAdminConfigured) {
-    return { ...getMemoryConnections(uid) };
+    return combinedMemory;
   }
 
   try {
@@ -74,12 +80,10 @@ export async function getUserConnections(uid: string): Promise<Record<string, Pl
     snapshot.docs.forEach((doc: any) => {
       result[doc.id] = doc.data() as PlatformConnection;
     });
-    // Merge with persistent file store
-    const fileConns = getMemoryConnections(uid);
-    return { ...fileConns, ...result };
+    return { ...combinedMemory, ...result };
   } catch (error) {
     console.warn("Falling back to persistent connection storage:", error);
-    return { ...getMemoryConnections(uid) };
+    return combinedMemory;
   }
 }
 
@@ -90,6 +94,10 @@ export async function setUserConnection(
 ) {
   const memoryConns = getMemoryConnections(uid);
   memoryConns[platformId] = connection;
+  if (uid !== "demo-user") {
+    const demoConns = getMemoryConnections("demo-user");
+    demoConns[platformId] = connection;
+  }
   saveStore(memoryStore);
 
   if (!isFirebaseAdminConfigured) {
@@ -104,7 +112,9 @@ export async function setUserConnection(
 }
 
 export async function getUserConnectionSecrets(uid: string, platformId: string) {
-  const fileSecrets = getMemorySecrets(uid)[platformId] ?? null;
+  const userSecs = getMemorySecrets(uid)[platformId] ?? null;
+  const demoSecs = uid !== "demo-user" ? (getMemorySecrets("demo-user")[platformId] ?? null) : null;
+  const fileSecrets = userSecs || demoSecs;
 
   if (!isFirebaseAdminConfigured) {
     return fileSecrets;
@@ -126,6 +136,10 @@ export async function setUserConnectionSecrets(
 ) {
   const memorySecs = getMemorySecrets(uid);
   memorySecs[platformId] = secrets;
+  if (uid !== "demo-user") {
+    const demoSecs = getMemorySecrets("demo-user");
+    demoSecs[platformId] = secrets;
+  }
   saveStore(memoryStore);
 
   if (!isFirebaseAdminConfigured) {
@@ -229,14 +243,22 @@ export function deleteCustomUserPost(uid: string, postId: string) {
   saveStore(memoryStore);
 }
 
-export function syncCustomPostsWithLiveOrigin(uid: string, liveVideoIds: string[]) {
-  if (memoryStore.customPosts?.[uid] && Array.isArray(liveVideoIds)) {
-    const liveSet = new Set(liveVideoIds);
-    memoryStore.customPosts[uid] = memoryStore.customPosts[uid].filter((post: any) => {
-      if (post.platform === "youtube" && post.id && post.id.startsWith("yt-") === false) {
-        return liveSet.has(post.id);
+export function syncCustomPostsWithLiveOrigin(uid: string, platformId: string, liveIds: string[]) {
+  if (Array.isArray(liveIds) && memoryStore.customPosts) {
+    const liveSet = new Set(liveIds.map((id) => String(id)));
+    const store = memoryStore.customPosts;
+    Object.keys(store).forEach((u) => {
+      if (Array.isArray(store[u])) {
+        store[u] = store[u].filter((post: any) => {
+          if (post.platform === platformId) {
+            const rawId = String(post.id || "").replace(/^(ig-live-|ig-published-|ig-custom-|yt-live-|yt-|x-live-|fb-live-|li-live-|th-live-)/, "");
+            if (liveSet.size > 0 && !post.id.includes("processing")) {
+              return liveSet.has(post.id) || liveSet.has(rawId);
+            }
+          }
+          return true;
+        });
       }
-      return true;
     });
     saveStore(memoryStore);
   }
@@ -277,4 +299,31 @@ export function getCustomUserPosts(uid: string): any[] {
   demoPosts.forEach((p) => postMap.set(p.id, p));
   userPosts.forEach((p) => postMap.set(p.id, p));
   return Array.from(postMap.values());
+}
+
+export function saveDeletedPostId(uid: string, postId: string) {
+  if (!memoryStore.deletedPosts) {
+    memoryStore.deletedPosts = {};
+  }
+  if (!memoryStore.deletedPosts[uid]) {
+    memoryStore.deletedPosts[uid] = [];
+  }
+  if (!memoryStore.deletedPosts[uid].includes(postId)) {
+    memoryStore.deletedPosts[uid].push(postId);
+  }
+  if (uid !== "demo-user") {
+    if (!memoryStore.deletedPosts["demo-user"]) {
+      memoryStore.deletedPosts["demo-user"] = [];
+    }
+    if (!memoryStore.deletedPosts["demo-user"].includes(postId)) {
+      memoryStore.deletedPosts["demo-user"].push(postId);
+    }
+  }
+  saveStore(memoryStore);
+}
+
+export function getDeletedPostIds(uid: string): Set<string> {
+  const userDeleted = memoryStore.deletedPosts?.[uid] || [];
+  const demoDeleted = memoryStore.deletedPosts?.["demo-user"] || [];
+  return new Set([...userDeleted, ...demoDeleted]);
 }

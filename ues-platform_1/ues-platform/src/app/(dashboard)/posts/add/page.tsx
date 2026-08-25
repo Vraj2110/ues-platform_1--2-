@@ -7,8 +7,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardTitle, CardSubtitle } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { auth, storage } from "@/lib/firebase";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { auth } from "@/lib/firebase";
 
 const PLATFORM_OPTIONS = [
   { value: "youtube", label: "YouTube ▶️", description: "Upload videos directly to YouTube" },
@@ -277,7 +276,6 @@ export default function AddPostPage() {
             try {
               const uploadedData = await videoUploadRes.json();
               if (uploadedData?.id) {
-                const oldId = data.videoId;
                 data.videoId = uploadedData.id;
                 if (data.post) {
                   data.post.id = uploadedData.id;

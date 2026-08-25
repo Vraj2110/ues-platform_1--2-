@@ -16,7 +16,7 @@ export async function POST(request: Request) {
 
     // 2. Parse Request Body
     const body = await request.json();
-    const { caption, imageUrl, videoUrl, connectionId } = body;
+    const { caption, imageUrl, videoUrl } = body;
 
     const mediaUrl = imageUrl || videoUrl;
     const mediaType = videoUrl ? "video" : "image";
@@ -43,16 +43,9 @@ export async function POST(request: Request) {
     const instagramConnection = connections.instagram;
     const instagramAccountId = instagramConnection?.accountId;
 
-    if (!accessToken || accessToken === "mock-access-token" || secrets?.mockConnection === true) {
+    if (!accessToken || accessToken === "mock-access-token" || secrets?.mockConnection === true || !instagramAccountId) {
       return NextResponse.json(
-        { error: "Instagram is not connected or has no valid access token. Please reconnect." },
-        { status: 401 }
-      );
-    }
-
-    if (!instagramAccountId) {
-      return NextResponse.json(
-        { error: "Instagram account ID not found. Please reconnect your account." },
+        { error: "Instagram account is not connected with a live OAuth token. Please go to Connect -> Connect Instagram to authorize live publishing to your Instagram handle." },
         { status: 400 }
       );
     }

@@ -313,50 +313,79 @@ export async function fetchYouTubeAnalyticsReport(accessToken: string, refreshTo
 }
 
 export async function fetchYouTubeRecentVideos(accessToken: string, refreshToken?: string, maxResults = 50) {
-  const searchUrl = new URL(YOUTUBE_SEARCH_URL);
-  searchUrl.searchParams.set("part", "snippet");
-  searchUrl.searchParams.set("forMine", "true");
-  searchUrl.searchParams.set("type", "video");
-  searchUrl.searchParams.set("order", "date");
-  searchUrl.searchParams.set("maxResults", String(maxResults));
+  async function fetchSearchPage(token: string, pageToken?: string) {
+    const searchUrl = new URL(YOUTUBE_SEARCH_URL);
+    searchUrl.searchParams.set("part", "snippet");
+    searchUrl.searchParams.set("forMine", "true");
+    searchUrl.searchParams.set("type", "video");
+    searchUrl.searchParams.set("order", "date");
+    searchUrl.searchParams.set("maxResults", String(maxResults));
+    if (pageToken) searchUrl.searchParams.set("pageToken", pageToken);
 
-  async function request(token: string) {
     const res = await fetch(searchUrl.toString(), {
       headers: { Authorization: `Bearer ${token}` },
     });
 
-    if (res.status === 401 && refreshToken) {
+    if (res.status === 401 && refreshToken && !pageToken) {
       const refreshed = await refreshGoogleToken(refreshToken);
       if (refreshed.access_token) {
-        return request(refreshed.access_token);
+        return fetchSearchPage(refreshed.access_token);
       }
     }
 
     if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`YouTube recent videos fetch failed (${res.status}): ${text}`);
+      return { items: [], nextPageToken: null };
     }
 
-    const searchData = await res.json();
-    const items = Array.isArray(searchData.items) ? searchData.items : [];
-    const videoIds = items.map((item: any) => item.id?.videoId || item.id).filter(Boolean).join(",");
+    const data = await res.json();
+    return {
+      items: Array.isArray(data.items) ? data.items : [],
+      nextPageToken: data.nextPageToken || null,
+    };
+  }
 
-    if (!videoIds) {
+  async function request(token: string) {
+    let allSearchItems: any[] = [];
+    let pageToken: string | null = null;
+    let pageCount = 0;
+
+    do {
+      pageCount++;
+      const pageResult = await fetchSearchPage(token, pageToken || undefined);
+      allSearchItems.push(...pageResult.items);
+      pageToken = pageResult.nextPageToken;
+    } while (pageToken && pageCount < 5);
+
+    if (allSearchItems.length === 0) {
       return [];
     }
 
-    // Fetch real-time statistics (views, likes, comments) AND status from YouTube Videos API
-    const videosUrl = new URL("https://www.googleapis.com/youtube/v3/videos");
-    videosUrl.searchParams.set("part", "snippet,statistics,status");
-    videosUrl.searchParams.set("id", videoIds);
+    const rawVideoIds = allSearchItems.map((item: any) => item.id?.videoId || item.id).filter(Boolean);
+    const videoIdChunks: string[][] = [];
+    for (let i = 0; i < rawVideoIds.length; i += 50) {
+      videoIdChunks.push(rawVideoIds.slice(i, i + 50));
+    }
 
-    const statsRes = await fetch(videosUrl.toString(), {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    let allDetailItems: any[] = [];
+    for (const chunk of videoIdChunks) {
+      const videosUrl = new URL("https://www.googleapis.com/youtube/v3/videos");
+      videosUrl.searchParams.set("part", "snippet,statistics,status");
+      videosUrl.searchParams.set("id", chunk.join(","));
 
-    if (!statsRes.ok) {
-      // Fallback to snippet if statistics call fails
-      return items.map((item: any) => ({
+      const statsRes = await fetch(videosUrl.toString(), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (statsRes.ok) {
+        const statsData = await statsRes.json();
+        if (Array.isArray(statsData.items)) {
+          allDetailItems.push(...statsData.items);
+        }
+      }
+    }
+
+    if (allDetailItems.length === 0) {
+      return allSearchItems.map((item: any) => ({
         id: item.id?.videoId || item.id,
         title: item.snippet?.title || "YouTube Video",
         thumbnailUrl: item.snippet?.thumbnails?.medium?.url || item.snippet?.thumbnails?.default?.url || "",
@@ -364,14 +393,12 @@ export async function fetchYouTubeRecentVideos(accessToken: string, refreshToken
         views: 0,
         likes: 0,
         comments: 0,
+        privacyStatus: "public",
       }));
     }
-    const statsData = await statsRes.json();
-    const detailItems = Array.isArray(statsData.items) ? statsData.items : [];
 
-    return detailItems
+    return allDetailItems
       .filter((item: any) => {
-        // Only return PUBLIC videos — filter out private and unlisted
         const privacy = item.status?.privacyStatus;
         return !privacy || privacy === "public";
       })
@@ -469,7 +496,7 @@ export async function fetchTwitterRecentTweets(accessToken: string, maxResults =
 
 // ─── Instagram ───────────────────────────────────────────────────────────────
 
-export async function fetchInstagramRecentMedia(accountId: string, accessToken: string, limit = 20) {
+export async function fetchInstagramRecentMedia(accountId: string, accessToken: string, limit = 100) {
   const userRes = await fetch(`https://graph.instagram.com/v20.0/${accountId}?fields=followers_count&access_token=${accessToken}`);
   let followerCount = 0;
   if (userRes.ok) {
@@ -477,26 +504,30 @@ export async function fetchInstagramRecentMedia(accountId: string, accessToken: 
     followerCount = userData?.followers_count || 0;
   }
 
-  const params = new URLSearchParams({
-    fields: "id,caption,media_type,media_url,thumbnail_url,timestamp,like_count,comments_count,permalink",
-    limit: String(limit),
-    access_token: accessToken,
-  });
+  let allItems: any[] = [];
+  let nextUrl: string | null = `https://graph.instagram.com/v20.0/${accountId}/media?fields=id,caption,media_type,media_url,thumbnail_url,timestamp,like_count,comments_count,permalink&limit=${limit}&access_token=${accessToken}`;
+  let pageCount = 0;
 
-  const res = await fetch(`https://graph.instagram.com/v20.0/${accountId}/media?${params.toString()}`);
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Instagram media fetch failed (${res.status}): ${text}`);
+  while (nextUrl && pageCount < 5) {
+    pageCount++;
+    const pageRes: Response = await fetch(nextUrl);
+    if (!pageRes.ok) {
+      if (allItems.length > 0) break;
+      const text = await pageRes.text();
+      throw new Error(`Instagram media fetch failed (${pageRes.status}): ${text}`);
+    }
+    const pageData: any = await pageRes.json();
+    const items = Array.isArray(pageData?.data) ? pageData.data : [];
+    allItems.push(...items);
+    nextUrl = pageData?.paging?.next || null;
   }
-  const data = await res.json();
-  const items = Array.isArray(data?.data) ? data.data : [];
 
-  return items.map((item: any) => ({
+  return allItems.map((item: any) => ({
     id: item.id,
     caption: item.caption || "",
     mediaType: item.media_type || "IMAGE",
     thumbnailUrl: item.thumbnail_url || item.media_url || "",
-    permalink: item.permalink || `https://instagram.com/p/${item.id}`,
+    permalink: item.permalink || `https://www.instagram.com/p/${item.id}`,
     publishedAt: item.timestamp || new Date().toISOString(),
     likes: Number(item.like_count || 0),
     comments: Number(item.comments_count || 0),

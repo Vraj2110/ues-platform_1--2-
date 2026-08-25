@@ -11,13 +11,6 @@ import { DASHBOARD_STATS, CONNECTED_PLATFORMS, UES_SCORE } from "@/lib/data";
 import { RecentPostsWidget } from "@/components/dashboard/RecentPostsWidget";
 
 export const metadata: Metadata = { title: "Dashboard" };
-const platformIcons: Record<string, string> = {
-  instagram: "📸", youtube: "▶️", twitter: "🐦", linkedin: "💼",
-};
-const platformNames: Record<string, string> = {
-  instagram: "Instagram", youtube: "YouTube", twitter: "X / Twitter", linkedin: "LinkedIn",
-};
-const scoreColor = (s: number) => s >= 70 ? "#4ECDC4" : "#FF6B6B";
 
 export default function DashboardPage() {
   return (

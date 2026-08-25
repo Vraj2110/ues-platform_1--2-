@@ -1,6 +1,5 @@
 
 "use client";
-import type { Metadata } from "next";
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardTitle, CardSubtitle } from "@/components/ui/Card";

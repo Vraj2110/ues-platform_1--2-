@@ -168,11 +168,6 @@ export function useRealTimePosts() {
           const customData = await customRes.json();
           if (Array.isArray(customData.posts)) {
             customUserPosts = customData.posts;
-            if (typeof window !== "undefined") {
-              try {
-                localStorage.setItem("ues_custom_posts", JSON.stringify(customUserPosts));
-              } catch {}
-            }
           }
         } else if (typeof window !== "undefined") {
           try {
@@ -181,6 +176,40 @@ export function useRealTimePosts() {
               const parsed = JSON.parse(cachedCustom);
               if (Array.isArray(parsed)) customUserPosts = parsed;
             }
+          } catch {}
+        }
+
+        // Sanitize custom posts against live origin feeds to purge deleted posts
+        if (typeof window !== "undefined" && customUserPosts.length > 0) {
+          const livePlatformIds = new Set(fetchedPlatformPosts.map((p) => p.id));
+          const livePlatformRawIds = new Set(
+            fetchedPlatformPosts.map((p) => p.id.replace(/^(ig-live-|yt-live-|x-live-|fb-live-|li-live-|th-live-|ig-|yt-|x-|fb-|li-|th-)/, ""))
+          );
+          const ytRawIds = new Set(fetchedYoutubePosts.map((v) => v.id.replace(/^yt-live-/, "")));
+
+          const sanitized = customUserPosts.filter((cp: any) => {
+            // Newly uploaded posts within 3 minutes stay visible while origin API indexing propagates
+            if (cp._addedAt && Date.now() - cp._addedAt < 3 * 60 * 1000) return true;
+
+            const rawId = String(cp.id || "").replace(/^(ig-live-|ig-published-|ig-custom-|yt-live-|yt-)/, "");
+            const isPlatformConnected = activeSet.has(cp.platform) || (cp.platform === "youtube" && ytConnected);
+
+            if (isPlatformConnected) {
+              if (cp.platform === "youtube" && fetchedYoutubePosts.length > 0) {
+                if (ytRawIds.has(rawId) || ytRawIds.has(cp.id)) return true;
+                return false;
+              }
+              if (fetchedPlatformPosts.some((p) => p.platform === cp.platform)) {
+                if (livePlatformIds.has(cp.id) || livePlatformRawIds.has(rawId)) return true;
+                return false;
+              }
+            }
+            return true;
+          });
+
+          customUserPosts = sanitized;
+          try {
+            localStorage.setItem("ues_custom_posts", JSON.stringify(sanitized));
           } catch {}
         }
 
@@ -202,7 +231,15 @@ export function useRealTimePosts() {
     // Run immediately for current auth state (or unauthenticated demo state)
     fetchData(auth.currentUser);
 
-    // Also listen for auth changes
+    // Listen for custom refresh events triggered after publishing
+    const handleRefreshEvent = () => {
+      if (active) fetchData(auth.currentUser);
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener("ues-refresh-posts", handleRefreshEvent);
+    }
+
+    // Listen for auth changes
     const unsubscribe = auth.onAuthStateChanged((user) => {
       fetchData(user);
     });
@@ -216,6 +253,9 @@ export function useRealTimePosts() {
       active = false;
       if (pollInterval) clearInterval(pollInterval);
       unsubscribe();
+      if (typeof window !== "undefined") {
+        window.removeEventListener("ues-refresh-posts", handleRefreshEvent);
+      }
     };
   }, []);
 
@@ -223,29 +263,38 @@ export function useRealTimePosts() {
 
   const liveYtIds = new Set(liveYoutubePosts.map((p) => p.id));
   const livePlatformIds = new Set(livePlatformPosts.map((p) => p.id));
+  const livePlatformRawIds = new Set(
+    livePlatformPosts.map((p) => p.id.replace(/^(ig-live-|yt-live-|x-live-|fb-live-|li-live-|th-live-|ig-|yt-|x-|fb-|li-|th-)/, ""))
+  );
 
   // Filter custom posts:
   // 1) Exclude duplicates already in live feeds
-  // 2) For YouTube, STRICTLY exclude any post that is private or unlisted
+  // 2) If live origin feed for a connected platform exists and does NOT contain this post, IT WAS DELETED ON ORIGIN -> EXCLUDE IT!
   const validCustomPosts = customPosts.filter((p: any) => {
+    const rawId = String(p.id || "").replace(/^(ig-live-|ig-published-|ig-custom-|yt-live-|yt-)/, "");
+    const platformLiveCount = livePlatformPosts.filter((lp) => lp.platform === p.platform).length;
+
+    // Newly uploaded posts within 3 minutes stay visible while origin API indexing propagates
+    if (p._addedAt && Date.now() - p._addedAt < 3 * 60 * 1000) {
+      if (livePlatformIds.has(p.id) || livePlatformRawIds.has(rawId) || liveYtIds.has(p.id)) return false;
+      return true;
+    }
+
     if (p.platform === "youtube") {
       if (p.privacyStatus && p.privacyStatus !== "public") return false; 
       const cleanId = p.id.replace(/^yt-/, "");
-      if (!liveYtIds.has(p.id) && !liveYtIds.has(`yt-live-${cleanId}`)) {
-        if (p._addedAt && Date.now() - p._addedAt > 5 * 60 * 1000) return false;
-        if (!p._addedAt) return false; // Hide old zombies
-        return true;
-      }
+      if (liveYtIds.has(p.id) || liveYtIds.has(`yt-live-${cleanId}`)) return false;
+      if (youtubeConnected && liveYoutubePosts.length > 0) return false;
       return false;
     }
-    if (!livePlatformIds.has(p.id)) {
-      if (p.id.includes("-live-")) { 
-        if (p._addedAt && Date.now() - p._addedAt > 5 * 60 * 1000) return false;
-        if (!p._addedAt) return false;
-      }
-      return true;
+
+    if (livePlatformIds.has(p.id) || livePlatformRawIds.has(rawId)) return false;
+    
+    if (connectedPlatforms.has(p.platform) && platformLiveCount > 0) {
+      return false; // Deleted on origin platform!
     }
-    return false;
+
+    return true;
   });
 
   const customPostIds = new Set(validCustomPosts.map((p) => p.id));
@@ -269,9 +318,22 @@ export function useRealTimePosts() {
     ...staticFallback,
   ];
 
-  // Final Pass: Ensure ONLY public YouTube posts are visible across the entire platform
+  // Final Pass: Filter deleted posts and ensure public visibility
+  let deletedIds = new Set<string>();
+  if (typeof window !== "undefined") {
+    try {
+      const cachedDeleted = localStorage.getItem("ues_deleted_posts");
+      if (cachedDeleted) {
+        const parsed = JSON.parse(cachedDeleted);
+        if (Array.isArray(parsed)) deletedIds = new Set(parsed);
+      }
+    } catch {}
+  }
+
   const allPosts = rawMerged
     .filter((p) => {
+      const cleanId = p.id.replace(/^(ig-live-|yt-live-|x-live-|fb-live-|li-live-|th-live-|ig-|yt-|x-|fb-|li-|th-)/, "");
+      if (deletedIds.has(p.id) || deletedIds.has(cleanId)) return false;
       if (p.platform === "youtube") {
         return !p.privacyStatus || p.privacyStatus === "public";
       }
@@ -353,6 +415,39 @@ export function useRealTimePosts() {
     return () => window.removeEventListener('ues-refresh-posts', handler);
   }, []);
 
+  const deletePost = useCallback(async (postId: string, platform?: string) => {
+    setLivePlatformPosts((prev) => prev.filter((p) => p.id !== postId));
+    setLiveYoutubePosts((prev) => prev.filter((p) => p.id !== postId));
+    setCustomPosts((prev) => prev.filter((p) => p.id !== postId));
+
+    if (typeof window !== "undefined") {
+      try {
+        const cached = localStorage.getItem("ues_deleted_posts");
+        const list: string[] = cached ? JSON.parse(cached) : [];
+        if (!list.includes(postId)) list.push(postId);
+        localStorage.setItem("ues_deleted_posts", JSON.stringify(list));
+      } catch {}
+    }
+
+    try {
+      const user = auth.currentUser;
+      let token = "";
+      if (user) {
+        token = await user.getIdToken();
+      }
+      await fetch("/api/posts/delete", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ postId, platform }),
+      });
+    } catch (err) {
+      console.warn("Delete API call notice:", err);
+    }
+  }, []);
+
   return {
     allPosts,
     youtubeConnected,
@@ -365,6 +460,7 @@ export function useRealTimePosts() {
     setCustomPosts,
     setLiveYoutubePosts,
     setLivePlatformPosts,
+    deletePost,
     refreshNow,
   };
 }

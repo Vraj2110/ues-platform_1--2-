@@ -307,10 +307,21 @@ export async function publishToInstagram(accessToken: string, targetId: string, 
       return { success: false, error: publishData.error?.message || 'Failed to publish media to Instagram' };
     }
 
+    let livePermalink = `https://www.instagram.com/p/${publishData.id}`;
+    try {
+      const permalinkRes = await fetch(`https://graph.instagram.com/v20.0/${publishData.id}?fields=permalink&access_token=${accessToken}`);
+      if (permalinkRes.ok) {
+        const permData = await permalinkRes.json();
+        if (permData.permalink) {
+          livePermalink = permData.permalink;
+        }
+      }
+    } catch {}
+
     return {
       success: true,
       platformPostId: publishData.id,
-      url: `https://instagram.com/p/${publishData.id}`,
+      url: livePermalink,
     };
   } catch (error: any) {
     console.warn('Error publishing to Instagram:', error);

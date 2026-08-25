@@ -45,7 +45,7 @@ function NavSection({ label, items }: { label: string; items: NavItem[] }) {
           className={cn(
             "flex items-center gap-2.5 px-3 py-2.5 rounded-xl cursor-pointer",
             "text-sm font-medium transition-all duration-200 no-underline mb-0.5",
-            pathname === item.href || pathname.startsWith(item.href + "/")
+            pathname ? (pathname === item.href || pathname.startsWith(item.href + "/")) : false
               ? "bg-cyan-mid text-cyan-ues"
               : "text-mint-700 hover:bg-cyan-light hover:text-[var(--color-mint)]"
           )}

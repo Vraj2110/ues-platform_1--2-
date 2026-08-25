@@ -96,7 +96,9 @@ export async function GET(request: Request) {
   const code = params.get("code");
   const error = params.get("error");
 
-  const origin = process.env.GOOGLE_REDIRECT_URI ? new URL(process.env.GOOGLE_REDIRECT_URI).origin : request.url;
+  const reqUrl = new URL(request.url);
+  const host = reqUrl.host.replace(":3001", ":3000");
+  const origin = `http://${host}`;
   if (error) {
     const redirectUrl = new URL(`/connect`, origin);
     redirectUrl.searchParams.set("error", error);
