@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/dev.mjs",
     "proxy": "node scripts/proxy.mjs",
     "build": "next build",
     "start": "next start",
