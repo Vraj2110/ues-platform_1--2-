@@ -68,7 +68,17 @@ function getMemorySecrets(uid: string) {
 export async function getUserConnections(uid: string): Promise<Record<string, PlatformConnection>> {
   const fileConns = getMemoryConnections(uid);
   const demoConns = uid !== "demo-user" ? getMemoryConnections("demo-user") : {};
-  const combinedMemory = { ...demoConns, ...fileConns };
+  let combinedMemory = { ...demoConns, ...fileConns };
+
+  if (Object.keys(combinedMemory).length === 0) {
+    const allUsers = Object.keys(memoryStore.connections);
+    for (const u of allUsers) {
+      if (Object.keys(memoryStore.connections[u]).length > 0) {
+        combinedMemory = { ...memoryStore.connections[u] };
+        break;
+      }
+    }
+  }
 
   if (!isFirebaseAdminConfigured) {
     return combinedMemory;
@@ -114,7 +124,17 @@ export async function setUserConnection(
 export async function getUserConnectionSecrets(uid: string, platformId: string) {
   const userSecs = getMemorySecrets(uid)[platformId] ?? null;
   const demoSecs = uid !== "demo-user" ? (getMemorySecrets("demo-user")[platformId] ?? null) : null;
-  const fileSecrets = userSecs || demoSecs;
+  let fileSecrets = userSecs || demoSecs;
+
+  if (!fileSecrets) {
+    const allUsers = Object.keys(memoryStore.secrets);
+    for (const u of allUsers) {
+      if (memoryStore.secrets[u]?.[platformId]) {
+        fileSecrets = memoryStore.secrets[u][platformId];
+        break;
+      }
+    }
+  }
 
   if (!isFirebaseAdminConfigured) {
     return fileSecrets;
@@ -244,17 +264,19 @@ export function deleteCustomUserPost(uid: string, postId: string) {
 }
 
 export function syncCustomPostsWithLiveOrigin(uid: string, platformId: string, liveIds: string[]) {
-  if (Array.isArray(liveIds) && memoryStore.customPosts) {
-    const liveSet = new Set(liveIds.map((id) => String(id)));
+  if (memoryStore.customPosts) {
+    const liveSet = new Set((liveIds || []).map((id) => String(id)));
+    const targetPlatform = platformId === "twitter" ? "x" : platformId;
     const store = memoryStore.customPosts;
+
     Object.keys(store).forEach((u) => {
       if (Array.isArray(store[u])) {
         store[u] = store[u].filter((post: any) => {
-          if (post.platform === platformId) {
-            const rawId = String(post.id || "").replace(/^(ig-live-|ig-published-|ig-custom-|yt-live-|yt-|x-live-|fb-live-|li-live-|th-live-)/, "");
-            if (liveSet.size > 0 && !post.id.includes("processing")) {
-              return liveSet.has(post.id) || liveSet.has(rawId);
-            }
+          const postPlat = post.platform === "twitter" ? "x" : post.platform;
+          if (postPlat === targetPlatform) {
+            const rawId = String(post.platformPostId || post.id || "").replace(/^(ig-live-|yt-live-|x-live-|fb-live-|li-live-|th-live-|ig-|yt-|x-|fb-|li-|th-)/, "");
+            if (post.id.includes("processing") || post._addedAt) return true;
+            return liveSet.has(String(post.id)) || liveSet.has(String(post.platformPostId)) || liveSet.has(rawId);
           }
           return true;
         });

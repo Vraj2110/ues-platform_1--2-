@@ -159,31 +159,36 @@ export default function AddPostPage() {
       // ── Media Upload Logic ──
       if (supportsMedia) {
         if (videoFile || thumbnailFile) {
-           const fileToUpload = videoFile || thumbnailFile;
-           mediaType = videoFile ? "video" : "image";
-           setUploadProgress(20);
-           try {
-             // Firebase Storage is hanging due to missing bucket/CORS config, using tmpfiles.org as a reliable public URL generator
-             const formData = new FormData();
-             formData.append("file", fileToUpload as File);
-             const fallbackRes = await fetch("https://tmpfiles.org/api/v1/upload", {
-               method: "POST",
-               body: formData
-             });
-             
-             if (!fallbackRes.ok) {
-               throw new Error("Temporary storage upload failed");
-             }
-             
-             const fallbackData = await fallbackRes.json();
-             // Convert to direct download link required by Instagram/Facebook
-             mediaUrl = fallbackData.data.url.replace("tmpfiles.org/", "tmpfiles.org/dl/");
-             setUploadProgress(70);
-           } catch (err: any) {
-             console.error("Upload Error:", err);
-             throw new Error("Failed to upload media. Details: " + (err.message || err));
-           }
-           setUploadProgress(75);
+          const fileToUpload = videoFile || thumbnailFile;
+          mediaType = videoFile ? "video" : "image";
+          setUploadProgress(20);
+
+          if (platform === "facebook") {
+            // Facebook: send file directly as multipart to our server (server → FB Graph API)
+            // No CDN upload needed — avoids Facebook rejecting tmpfiles.org URLs
+            mediaUrl = undefined; // will be sent as raw file in FormData below
+            setUploadProgress(70);
+          } else {
+            // Instagram / other: upload to tmpfiles.org to get a public URL
+            try {
+              const formData = new FormData();
+              formData.append("file", fileToUpload as File);
+              const fallbackRes = await fetch("https://tmpfiles.org/api/v1/upload", {
+                method: "POST",
+                body: formData,
+              });
+              if (!fallbackRes.ok) throw new Error("Temporary storage upload failed");
+              const fallbackData = await fallbackRes.json();
+              // Convert to direct download link required by Instagram
+              mediaUrl = fallbackData.data.url.replace("tmpfiles.org/", "tmpfiles.org/dl/");
+              setUploadProgress(70);
+            } catch (err: any) {
+              console.error("Upload Error:", err);
+              throw new Error("Failed to upload media. Details: " + (err.message || err));
+            }
+          }
+
+          setUploadProgress(75);
         }
       }
 
@@ -198,10 +203,7 @@ export default function AddPostPage() {
       if (platform === "instagram") {
         endpoint = "/api/instagram/publish";
         headers["Content-Type"] = "application/json";
-        
-        // Build caption from title and description
         const combinedCaption = description ? `${title.trim()}\n\n${description}`.trim() : title.trim();
-        
         reqBody = JSON.stringify({
           caption: combinedCaption,
           imageUrl: mediaType === "image" ? (mediaUrl || thumbnailPreviewUrl) : undefined,
@@ -220,6 +222,17 @@ export default function AddPostPage() {
         formData.append("publishedAt", publishedAt);
         formData.append("videoFile", videoFile);
         if (thumbnailPreviewUrl) formData.append("thumbnailUrl", thumbnailPreviewUrl);
+        reqBody = formData;
+      } else if (platform === "facebook" && (videoFile || thumbnailFile)) {
+        // Send file directly as multipart — server relays binary to Facebook Graph API
+        const fileToUpload = videoFile || thumbnailFile!;
+        const formData = new FormData();
+        formData.append("platform", "facebook");
+        formData.append("title", title);
+        formData.append("description", description);
+        formData.append("publishedAt", publishedAt);
+        formData.append("mediaType", videoFile ? "video" : "image");
+        formData.append("videoFile", fileToUpload);  // "videoFile" field is parsed for all platforms
         reqBody = formData;
       } else {
         headers["Content-Type"] = "application/json";
@@ -317,8 +330,8 @@ export default function AddPostPage() {
         `🎉 Published to ${platformDisplay} successfully!${publishedUrl ? ` View: ${publishedUrl}` : ""}`
       );
 
-      // Update local storage cache
-      if (typeof window !== "undefined" && data.post) {
+      // Update local storage cache (only for mock posts, real posts are fetched via sync)
+      if (typeof window !== "undefined" && data.post && !data.publishedToApi) {
         try {
           const cached = localStorage.getItem("ues_custom_posts");
           const customList = cached ? JSON.parse(cached) : [];
@@ -327,15 +340,20 @@ export default function AddPostPage() {
         } catch {}
       }
 
-      // Trigger refresh and redirect
+      // Stay on upload page, reset form state after a short delay so the user can see the success message
       setTimeout(() => {
         if (typeof window !== "undefined") {
           window.dispatchEvent(new CustomEvent("ues-refresh-posts"));
-          window.location.href = "/content?published=true";
-        } else {
-          router.push("/content");
         }
-      }, 300);
+        setTitle("");
+        setDescription("");
+        setVideoFile(null);
+        setVideoPreviewUrl(null);
+        setThumbnailFile(null);
+        setThumbnailPreviewUrl(null);
+        setTags("");
+        setUploadProgress(0);
+      }, 2500);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error publishing content.");
     } finally {

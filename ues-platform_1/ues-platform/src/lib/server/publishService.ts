@@ -85,10 +85,6 @@ export async function publishToTwitter(accessToken: string, text: string, refres
           body: JSON.stringify({ text: text.slice(0, 280) }),
         });
         
-        if (retryResponse.status === 429) {
-          return { success: false, error: 'Rate limited. Please try again later.', rateLimited: true, tokenRefreshed: true };
-        }
-
         if (retryResponse.ok) {
           const retryData = await retryResponse.json();
           return {
@@ -98,37 +94,37 @@ export async function publishToTwitter(accessToken: string, text: string, refres
             tokenRefreshed: true
           };
         }
-        
-        if (retryResponse.status === 402 || retryResponse.status === 403 || retryResponse.status === 429) {
+
+        if (retryResponse.status === 403) {
           return {
-            success: true,
-            platformPostId: "mock-" + Date.now(),
-            url: "https://x.com/mock_post",
-            error: "X API limit reached. Simulated success for testing.",
+            success: false,
+            error: "X (Twitter) API Error: Forbidden (403). Ensure your X Developer App has 'Read and Write' permissions enabled under User Authentication settings, and reconnect your account.",
             tokenRefreshed: true
           };
         }
 
-        const retryError = await retryResponse.json();
-        return { success: false, error: retryError.detail || 'Failed to publish to Twitter after refresh', tokenRefreshed: true };
+        if (retryResponse.status === 429) {
+          return { success: false, error: 'X API Rate limited. Please try again later.', rateLimited: true, tokenRefreshed: true };
+        }
+
+        const retryError = await retryResponse.json().catch(() => null);
+        return { success: false, error: retryError?.detail || retryError?.error_description || 'Failed to publish to X/Twitter after refresh', tokenRefreshed: true };
       }
     }
 
     if (response.status === 429) {
-      return { success: false, error: 'Rate limited. Please try again later.', rateLimited: true };
+      return { success: false, error: 'X API Rate limited. Please try again later.', rateLimited: true };
     }
 
     if (!response.ok) {
-      if (response.status === 402 || response.status === 403 || response.status === 429) {
+      if (response.status === 403) {
         return {
-          success: true,
-          platformPostId: "mock-" + Date.now(),
-          url: "https://x.com/mock_post",
-          error: "X API limit reached. Simulated success for testing.",
+          success: false,
+          error: "X (Twitter) API Error: Forbidden (403). Ensure your X Developer App has 'Read and Write' permissions enabled under User Authentication settings, and reconnect your account.",
         };
       }
-      const errorData = await response.json();
-      return { success: false, error: errorData.detail || 'Failed to publish to Twitter' };
+      const errorData = await response.json().catch(() => null);
+      return { success: false, error: errorData?.detail || errorData?.error_description || 'Failed to publish to X/Twitter' };
     }
 
     const data = await response.json();
@@ -143,92 +139,123 @@ export async function publishToTwitter(accessToken: string, text: string, refres
   }
 }
 
-export async function publishToFacebook(accessToken: string, text: string, mediaUrl?: string, mediaType?: "image" | "video"): Promise<PublishResult> {
+export async function publishToFacebook(
+  accessToken: string,
+  text: string,
+  mediaUrl?: string,
+  mediaType?: "image" | "video",
+  rawFileBuffer?: Buffer,
+  rawFileName?: string,
+  rawFileMime?: string,
+): Promise<PublishResult> {
   try {
-    const pagesResponse = await fetch(`https://graph.facebook.com/v19.0/me/accounts?access_token=${accessToken}`);
     let pageToken = accessToken;
-    let targetId = 'me';
+    let targetId = "me";
 
-    if (pagesResponse.ok) {
-      const pagesData = await pagesResponse.json();
-      if (pagesData.data && pagesData.data.length > 0) {
-        pageToken = pagesData.data[0].access_token;
-        targetId = pagesData.data[0].id;
-      } else {
-        return { success: false, error: 'No Facebook Pages found. Facebook API only allows posting to Pages (not personal profiles). Please create a Page or ensure you granted Page permissions during login.' };
-      }
-    } else {
-      return { success: false, error: 'Failed to fetch your Facebook Pages. Please reconnect your account and ensure you grant Page permissions.' };
-    }
-
-    let endpoint = `https://graph.facebook.com/v19.0/${targetId}/feed`;
-    let requestOptions: RequestInit = {};
-
-    if (mediaUrl) {
-      if (mediaType === "video") {
-        endpoint = `https://graph.facebook.com/v19.0/${targetId}/videos`;
-        requestOptions = {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ access_token: pageToken, file_url: mediaUrl, description: text }),
-        };
-      } else {
-        endpoint = `https://graph.facebook.com/v19.0/${targetId}/photos`;
-        if (mediaUrl.startsWith('data:')) {
-          // Direct fast upload using FormData (no public URL required)
-          const base64Response = await fetch(mediaUrl);
-          const blob = await base64Response.blob();
-          const formData = new FormData();
-          formData.append('access_token', pageToken);
-          formData.append('message', text);
-          formData.append('source', blob, 'photo.jpg');
-          requestOptions = {
-            method: 'POST',
-            body: formData,
-          };
-        } else {
-          // Fallback for public URLs
-          requestOptions = {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ access_token: pageToken, url: mediaUrl, message: text }),
-          };
+    // Try to get a Page token — required for posting to Pages
+    try {
+      const pagesResponse = await fetch(`https://graph.facebook.com/v19.0/me/accounts?access_token=${accessToken}`);
+      if (pagesResponse.ok) {
+        const pagesData = await pagesResponse.json();
+        if (Array.isArray(pagesData.data) && pagesData.data.length > 0) {
+          pageToken = pagesData.data[0].access_token || accessToken;
+          targetId = pagesData.data[0].id;
         }
       }
-    } else {
+    } catch {
+      // Fall through to user token on "me"
+    }
+
+    let endpoint: string;
+    let requestOptions: RequestInit;
+
+    // ── Image upload: raw binary takes priority (no CDN needed) ──
+    if (rawFileBuffer && rawFileMime && !rawFileMime.startsWith("video/")) {
+      endpoint = `https://graph.facebook.com/v19.0/${targetId}/photos`;
+      const formData = new FormData();
+      formData.append("access_token", pageToken);
+      formData.append("caption", text);
+      formData.append("source", new Blob([new Uint8Array(rawFileBuffer)], { type: rawFileMime }), rawFileName || "photo.jpg");
+      requestOptions = { method: "POST", body: formData };
+
+    // ── Video upload: raw binary ──
+    } else if (rawFileBuffer && rawFileMime && rawFileMime.startsWith("video/")) {
+      endpoint = `https://graph.facebook.com/v19.0/${targetId}/videos`;
+      const formData = new FormData();
+      formData.append("access_token", pageToken);
+      formData.append("description", text);
+      formData.append("source", new Blob([new Uint8Array(rawFileBuffer)], { type: rawFileMime }), rawFileName || "video.mp4");
+      requestOptions = { method: "POST", body: formData };
+
+    // ── Image via reliable public URL (not tmpfiles/localhost) ──
+    } else if (
+      mediaUrl &&
+      mediaType === "image" &&
+      !mediaUrl.startsWith("data:") &&
+      !mediaUrl.includes("tmpfiles.org") &&
+      !mediaUrl.includes("localhost") &&
+      mediaUrl.startsWith("http")
+    ) {
+      endpoint = `https://graph.facebook.com/v19.0/${targetId}/photos`;
       requestOptions = {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ access_token: pageToken, url: mediaUrl, caption: text }),
+      };
+
+    // ── Video via reliable public URL ──
+    } else if (
+      mediaUrl &&
+      mediaType === "video" &&
+      !mediaUrl.includes("tmpfiles.org") &&
+      !mediaUrl.includes("localhost") &&
+      mediaUrl.startsWith("http")
+    ) {
+      endpoint = `https://graph.facebook.com/v19.0/${targetId}/videos`;
+      requestOptions = {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ access_token: pageToken, file_url: mediaUrl, description: text }),
+      };
+
+    // ── Text-only post (fallback) ──
+    } else {
+      endpoint = `https://graph.facebook.com/v19.0/${targetId}/feed`;
+      requestOptions = {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ access_token: pageToken, message: text }),
       };
     }
 
     const response = await fetch(endpoint, requestOptions);
-
     const data = await response.json();
 
-    if (response.status === 401 || (data.error && data.error.type === 'OAuthException' && data.error.code === 190)) {
-      return { success: false, error: 'Facebook token expired. Please reconnect your Facebook account.' };
+    if (response.status === 401 || (data.error?.type === "OAuthException" && data.error?.code === 190)) {
+      return { success: false, error: "Facebook token expired. Please reconnect your Facebook account." };
     }
-
-    if (response.status === 429 || (data.error && data.error.code === 17)) {
-      return { success: false, error: 'Facebook rate limit reached.', rateLimited: true };
+    if (response.status === 429 || data.error?.code === 17) {
+      return { success: false, error: "Facebook rate limit reached.", rateLimited: true };
     }
-
+    if (data.error?.code === 100 || data.error?.code === 200) {
+      return { success: false, error: `Facebook API error: ${data.error.message || "Invalid parameter"}. Ensure your Facebook app has "pages_manage_posts" permission and you are a Page admin.` };
+    }
     if (!response.ok) {
-      return { success: false, error: data.error?.message || 'Failed to publish to Facebook' };
+      return { success: false, error: data.error?.message || "Failed to publish to Facebook" };
     }
 
+    const finalPostId = data.id && String(data.id).includes("_") ? String(data.id) : `${targetId}_${data.id}`;
     return {
       success: true,
-      platformPostId: data.id,
-      url: `https://facebook.com/${data.id}`,
+      platformPostId: finalPostId,
+      url: `https://facebook.com/${finalPostId}`,
     };
   } catch (error: any) {
-    console.warn('Error publishing to Facebook:', error);
-    return { success: false, error: error.message || 'Unknown error occurred while publishing to Facebook' };
+    console.warn("Error publishing to Facebook:", error);
+    return { success: false, error: error.message || "Unknown error occurred while publishing to Facebook" };
   }
 }
+
 
 export async function publishToInstagram(accessToken: string, targetId: string, text: string, mediaUrl: string, mediaType: "image" | "video"): Promise<PublishResult> {
   try {

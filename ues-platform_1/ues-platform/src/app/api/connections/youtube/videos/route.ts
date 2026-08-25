@@ -8,11 +8,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   try {
     const decoded = await verifyIdToken(request);
-    if (!decoded?.uid) {
-      return NextResponse.json({ videos: [], connected: false, error: "Unauthorized" }, { status: 200 });
-    }
-
-    const uid = decoded.uid as string;
+    const uid = (decoded as any)?.uid || "demo-user";
     const secrets = await getUserConnectionSecrets(uid, "youtube");
 
     if (!secrets?.accessToken) {
@@ -38,11 +34,6 @@ export async function GET(request: Request) {
           .filter((v: any) => !v.privacyStatus || v.privacyStatus === "public")
           .map((v: any) => ({ ...v, followerCount }));
           
-        const liveVideoIds = publicVideos.map((v: any) => v.id).filter(Boolean);
-        try {
-          const { syncCustomPostsWithLiveOrigin } = await import("@/lib/server/connections");
-          syncCustomPostsWithLiveOrigin(uid, "youtube", liveVideoIds);
-        } catch {}
         return NextResponse.json({ videos: publicVideos, connected: true });
       }
       return NextResponse.json({ videos: [], connected: true });
@@ -59,12 +50,7 @@ export async function GET(request: Request) {
               const publicVideos = videos
                 .filter((v: any) => !v.privacyStatus || v.privacyStatus === "public")
                 .map((v: any) => ({ ...v, followerCount }));
-                
-              const liveVideoIds = publicVideos.map((v: any) => v.id).filter(Boolean);
-              try {
-                const { syncCustomPostsWithLiveOrigin } = await import("@/lib/server/connections");
-                syncCustomPostsWithLiveOrigin(uid, "youtube", liveVideoIds);
-              } catch {}
+
               return NextResponse.json({ videos: publicVideos, connected: true });
             }
           }

@@ -496,43 +496,147 @@ export async function fetchTwitterRecentTweets(accessToken: string, maxResults =
 
 // ─── Instagram ───────────────────────────────────────────────────────────────
 
-export async function fetchInstagramRecentMedia(accountId: string, accessToken: string, limit = 100) {
-  const userRes = await fetch(`https://graph.instagram.com/v20.0/${accountId}?fields=followers_count&access_token=${accessToken}`);
+export async function fetchInstagramRecentMedia(accountId: string, accessToken: string, limit = 25) {
   let followerCount = 0;
-  if (userRes.ok) {
-    const userData = await userRes.json();
-    followerCount = userData?.followers_count || 0;
+  const targetId = accountId && accountId !== "undefined" ? accountId : "me";
+
+  try {
+    const userRes = await fetch(`https://graph.instagram.com/v20.0/${targetId}?fields=followers_count&access_token=${accessToken}`);
+    if (userRes.ok) {
+      const userData = await userRes.json();
+      followerCount = userData?.followers_count || 0;
+    }
+  } catch (e) {
+    console.warn("[Instagram] Follower count fetch notice:", e);
   }
+
+  // Include video_views – available for VIDEO/REELS on Business/Creator accounts
+  const fields = "id,caption,media_type,media_url,thumbnail_url,timestamp,like_count,comments_count,permalink,video_views,children{media_url,thumbnail_url,media_type}";
+  const safeLimit = Math.min(limit, 25);
 
   let allItems: any[] = [];
-  let nextUrl: string | null = `https://graph.instagram.com/v20.0/${accountId}/media?fields=id,caption,media_type,media_url,thumbnail_url,timestamp,like_count,comments_count,permalink&limit=${limit}&access_token=${accessToken}`;
-  let pageCount = 0;
+  let nextUrl: string | null = null;
 
-  while (nextUrl && pageCount < 5) {
-    pageCount++;
-    const pageRes: Response = await fetch(nextUrl);
-    if (!pageRes.ok) {
-      if (allItems.length > 0) break;
-      const text = await pageRes.text();
-      throw new Error(`Instagram media fetch failed (${pageRes.status}): ${text}`);
+  // Endpoint strategies to ensure compatibility across Graph API versions and account types
+  const candidateEndpoints = [
+    `https://graph.instagram.com/v20.0/${targetId}/media?fields=${fields}&limit=${safeLimit}&access_token=${accessToken}`,
+    `https://graph.instagram.com/v20.0/me/media?fields=${fields}&limit=${safeLimit}&access_token=${accessToken}`,
+    `https://graph.instagram.com/me/media?fields=${fields}&limit=${safeLimit}&access_token=${accessToken}`,
+    `https://graph.facebook.com/v20.0/${targetId}/media?fields=${fields}&limit=${safeLimit}&access_token=${accessToken}`,
+  ];
+
+  for (const ep of candidateEndpoints) {
+    try {
+      const firstRes = await fetch(ep);
+      if (firstRes.ok) {
+        const firstData: any = await firstRes.json();
+        if (Array.isArray(firstData?.data)) {
+          allItems.push(...firstData.data);
+          nextUrl = firstData?.paging?.next || null;
+          break;
+        }
+      }
+    } catch (err) {
+      console.warn(`[Instagram] Endpoint attempt failed (${ep}):`, err);
     }
-    const pageData: any = await pageRes.json();
-    const items = Array.isArray(pageData?.data) ? pageData.data : [];
-    allItems.push(...items);
-    nextUrl = pageData?.paging?.next || null;
   }
 
-  return allItems.map((item: any) => ({
-    id: item.id,
-    caption: item.caption || "",
-    mediaType: item.media_type || "IMAGE",
-    thumbnailUrl: item.thumbnail_url || item.media_url || "",
-    permalink: item.permalink || `https://www.instagram.com/p/${item.id}`,
-    publishedAt: item.timestamp || new Date().toISOString(),
-    likes: Number(item.like_count || 0),
-    comments: Number(item.comments_count || 0),
-    followerCount,
-  }));
+  // Page through up to 10 pages to ensure ALL posts are retrieved
+  let pageCount = 1;
+  while (nextUrl && pageCount < 10) {
+    pageCount++;
+    try {
+      const pageRes: Response = await fetch(nextUrl);
+      if (!pageRes.ok) break;
+      const pageData: any = await pageRes.json();
+      const items = Array.isArray(pageData?.data) ? pageData.data : [];
+      allItems.push(...items);
+      nextUrl = pageData?.paging?.next || null;
+    } catch {
+      break;
+    }
+  }
+
+  // Fetch per-media insights (impressions = views, saved, shares) for Business/Creator accounts
+  const insightMap = new Map<string, { impressions: number | null; plays: number | null; reach: number | null; saved: number | null; shares: number | null }>();
+  await Promise.allSettled(
+    allItems.map(async (item: any) => {
+      const mediaType = item.media_type || "IMAGE";
+      const isVideo = mediaType === "VIDEO";
+      const viewsMetric = isVideo ? "views" : "impressions";
+      const metrics = `${viewsMetric},reach,saved,shares`;
+      const url = `https://graph.instagram.com/v20.0/${item.id}/insights?metric=${metrics}&access_token=${accessToken}`;
+
+      console.log(`[Instagram Request] Endpoint: ${url}`);
+      console.log(`[Instagram Request] Media ID: ${item.id} (${mediaType}), Requested metrics: ${metrics}`);
+
+      try {
+        const insightRes = await fetch(url);
+        console.log(`[Instagram Request] Media ID: ${item.id} HTTP status: ${insightRes.status}`);
+        
+        if (insightRes.ok) {
+          const insightData = await insightRes.json();
+          console.log(`[Instagram Request] Media ID: ${item.id} API response:`, JSON.stringify(insightData));
+
+          const m: Record<string, number> = {};
+          if (Array.isArray(insightData?.data)) {
+            insightData.data.forEach((entry: any) => {
+              const val = entry.values?.[0]?.value ?? entry.value;
+              m[entry.name] = typeof val === "number" ? val : 0;
+            });
+          }
+          console.log(`[Instagram Request] Parsed for Media ID: ${item.id} -> views: ${m[viewsMetric]}, shares: ${m.shares}, reach: ${m.reach}, saves: ${m.saved}`);
+
+          insightMap.set(item.id, {
+            impressions: m.impressions ?? null,
+            plays: m.views ?? null, // Map the fetched 'views' metric to our plays/views storage slot
+            reach: m.reach ?? null,
+            saved: m.saved ?? null,
+            shares: m.shares ?? null,
+          });
+        } else {
+          const errText = await insightRes.text();
+          console.warn(`[Instagram API] Failed to fetch insights for media ${item.id} (${mediaType}). Status: ${insightRes.status}. Error:`, errText);
+          insightMap.set(item.id, { impressions: null, plays: null, reach: null, saved: null, shares: null });
+        }
+      } catch (err) {
+        console.error(`[Instagram API] Exception during insights fetch for ${item.id}:`, err);
+        insightMap.set(item.id, { impressions: null, plays: null, reach: null, saved: null, shares: null });
+      }
+    })
+  );
+
+  return allItems.map((item: any) => {
+    let thumbnailUrl = item.thumbnail_url || item.media_url || "";
+    if (!thumbnailUrl && item.children?.data?.length > 0) {
+      const firstChild = item.children.data[0];
+      thumbnailUrl = firstChild.thumbnail_url || firstChild.media_url || "";
+    }
+
+    const insight = insightMap.get(item.id);
+    // views: video_views for reels/videos; then plays (Reels/Videos from insights); then impressions (Images/Albums from insights); then reach
+    const videoViews = typeof item.video_views === "number" ? item.video_views : null;
+    const views = videoViews ?? insight?.plays ?? insight?.impressions ?? insight?.reach ?? null;
+    const saved = insight?.saved ?? null;
+    const shares = insight?.shares ?? null;
+
+    console.log(`[Instagram Request] Media ID: ${item.id} final parsed metrics -> views: ${views}, shares: ${shares}, likes: ${item.like_count}, comments: ${item.comments_count}`);
+
+    return {
+      id: item.id,
+      caption: item.caption || "",
+      mediaType: item.media_type || "IMAGE",
+      thumbnailUrl,
+      permalink: item.permalink || `https://www.instagram.com/p/${item.id}`,
+      publishedAt: item.timestamp || new Date().toISOString(),
+      likes: Number(item.like_count || 0),
+      comments: Number(item.comments_count || 0),
+      views,
+      saved,
+      shares,
+      followerCount,
+    };
+  });
 }
 
 // ─── Facebook ────────────────────────────────────────────────────────────────
@@ -554,13 +658,29 @@ export async function fetchFacebookRecentPosts(accessToken: string, limit = 20) 
   const allItems: any[] = [];
 
   for (const page of pages) {
+    const fieldsWithInsights = "id,message,story,full_picture,created_time,reactions.summary(total_count),comments.summary(total_count),shares,insights";
     const params = new URLSearchParams({
-      fields: "id,message,story,full_picture,created_time,reactions.summary(total_count),comments.summary(total_count),shares",
+      fields: fieldsWithInsights,
       limit: String(limit),
       access_token: page.access_token || accessToken,
     });
 
-    const postsRes = await fetch(`https://graph.facebook.com/v19.0/${page.id}/posts?${params.toString()}`);
+    let postsRes = await fetch(`https://graph.facebook.com/v19.0/${page.id}/posts?${params.toString()}`);
+    
+    if (!postsRes.ok) {
+      const errMsg = await postsRes.text();
+      console.warn(`[Facebook API] Failed to fetch posts with insights for page ${page.id}. Status: ${postsRes.status}. Error:`, errMsg);
+      
+      // Retry without insights to at least fetch the basic posts
+      console.log(`[Facebook API] Retrying page ${page.id} posts fetch without insights...`);
+      const retryParams = new URLSearchParams({
+        fields: "id,message,story,full_picture,created_time,reactions.summary(total_count),comments.summary(total_count),shares",
+        limit: String(limit),
+        access_token: page.access_token || accessToken,
+      });
+      postsRes = await fetch(`https://graph.facebook.com/v19.0/${page.id}/posts?${retryParams.toString()}`);
+    }
+
     if (postsRes.ok) {
       const data = await postsRes.json();
       if (Array.isArray(data?.data) && data.data.length > 0) {
@@ -568,9 +688,12 @@ export async function fetchFacebookRecentPosts(accessToken: string, limit = 20) 
         allItems.push(...postsWithFollowers);
         continue;
       }
+    } else {
+      const finalErr = await postsRes.text();
+      console.error(`[Facebook API] Direct posts fetch failed completely for page ${page.id}. Status: ${postsRes.status}. Error:`, finalErr);
     }
     
-    // Fallback: If posts endpoint fails or is empty (often the case for personal profiles without user_posts permission), try the feed endpoint
+    // Fallback: If posts endpoint fails or is empty, try the feed endpoint
     if (page.id === "me" || page.id === "me/") {
       const feedRes = await fetch(`https://graph.facebook.com/v19.0/me/feed?${params.toString()}`);
       if (feedRes.ok) {
@@ -585,16 +708,35 @@ export async function fetchFacebookRecentPosts(accessToken: string, limit = 20) 
     }
   }
 
-  return allItems.map((item: any) => ({
-    id: item.id,
-    message: item.message || item.story || "",
-    thumbnailUrl: item.full_picture || "",
-    publishedAt: item.created_time || new Date().toISOString(),
-    likes: Number(item.reactions?.summary?.total_count || 0),
-    comments: Number(item.comments?.summary?.total_count || 0),
-    shares: Number(item.shares?.count || 0),
-    followerCount: item.followerCount || 0,
-  }));
+  return allItems.map((item: any) => {
+    let reach: number | null = null;
+    let impressions: number | null = null;
+    
+    console.log(`[Facebook Sync Debug] Raw post:`, JSON.stringify({ id: item.id, message: item.message?.slice(0, 30), insights: item.insights }));
+
+    if (Array.isArray(item.insights?.data)) {
+      item.insights.data.forEach((entry: any) => {
+        const val = entry.values?.[0]?.value ?? entry.value;
+        if (entry.name === "post_impressions_unique") reach = typeof val === "number" ? val : null;
+        if (entry.name === "post_impressions") impressions = typeof val === "number" ? val : null;
+      });
+    }
+    const views = impressions ?? reach ?? 0;
+    
+    console.log(`[Facebook Sync Debug] Parsed post ID: ${item.id} -> views (impressions/reach): ${views}`);
+
+    return {
+      id: item.id,
+      message: item.message || item.story || "",
+      thumbnailUrl: item.full_picture || "",
+      publishedAt: item.created_time || new Date().toISOString(),
+      likes: Number(item.reactions?.summary?.total_count || 0),
+      comments: Number(item.comments?.summary?.total_count || 0),
+      shares: Number(item.shares?.count || 0),
+      views,
+      followerCount: item.followerCount || 0,
+    };
+  });
 }
 
 // ─── LinkedIn ─────────────────────────────────────────────────────────────────

@@ -13,6 +13,7 @@ import {
   publishToInstagram,
   refreshTwitterToken,
 } from "@/lib/server/publishService";
+import { refreshGoogleToken } from "@/lib/server/oauth";
 
 export const dynamic = "force-dynamic";
 
@@ -105,7 +106,7 @@ export async function POST(request: Request) {
           },
         };
 
-        const sessionRes = await fetch(
+        let sessionRes = await fetch(
           "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
           {
             method: "POST",
@@ -118,39 +119,79 @@ export async function POST(request: Request) {
           }
         );
 
-        if (sessionRes.ok) {
-          const sessionUrl = sessionRes.headers.get("location");
-          if (sessionUrl && videoFile) {
-            // Upload the video binary directly from Node server to YouTube (bypasses CORS)
-            try {
-              const arrayBuffer = await videoFile.arrayBuffer();
-              const uploadRes = await fetch(sessionUrl, {
-                method: "PUT",
-                headers: {
-                  "Content-Type": videoFile.type || "video/mp4",
-                  "Content-Length": String(arrayBuffer.byteLength),
-                },
-                body: Buffer.from(arrayBuffer),
-              });
+        const refreshToken = typeof secrets?.refreshToken === "string" ? secrets.refreshToken : "";
 
-              if (uploadRes.ok) {
-                const ytData = await uploadRes.json();
-                if (ytData?.id) {
-                  videoId = ytData.id;
+        if (sessionRes.status === 401 && refreshToken) {
+          try {
+            console.log("YouTube access token expired (401), refreshing token...");
+            const refreshed = await refreshGoogleToken(refreshToken);
+            if (refreshed.access_token) {
+              const updatedSecrets = {
+                ...secrets,
+                accessToken: refreshed.access_token,
+                createdAt: new Date().toISOString(),
+              };
+              await setUserConnectionSecrets(uid, "youtube", updatedSecrets);
+
+              sessionRes = await fetch(
+                "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
+                {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${refreshed.access_token}`,
+                    "Content-Type": "application/json; charset=UTF-8",
+                    "X-Upload-Content-Type": videoFile?.type || "video/mp4",
+                  },
+                  body: JSON.stringify(metadata),
                 }
-              } else {
-                const errTxt = await uploadRes.text();
-                console.error("YouTube server video PUT failed:", uploadRes.status, errTxt);
-              }
-            } catch (putErr) {
-              console.error("Error streaming video bytes to YouTube:", putErr);
+              );
             }
-          } else if (sessionUrl) {
-            resumableUrl = sessionUrl;
+          } catch (refreshErr) {
+            console.error("Failed to refresh YouTube token:", refreshErr);
           }
-        } else {
+        }
+
+        if (!sessionRes.ok) {
           const errorText = await sessionRes.text();
           console.warn("YouTube Upload session creation failed:", sessionRes.status, errorText);
+          return NextResponse.json({
+            error: `YouTube API failed with status ${sessionRes.status}: ${errorText}`,
+          }, { status: 400 });
+        }
+
+        const sessionUrl = sessionRes.headers.get("location");
+        if (sessionUrl && videoFile) {
+          try {
+            const arrayBuffer = await videoFile.arrayBuffer();
+            const uploadRes = await fetch(sessionUrl, {
+              method: "PUT",
+              headers: {
+                "Content-Type": videoFile.type || "video/mp4",
+                "Content-Length": String(arrayBuffer.byteLength),
+              },
+              body: Buffer.from(arrayBuffer),
+            });
+
+            if (uploadRes.ok) {
+              const ytData = await uploadRes.json();
+              if (ytData?.id) {
+                videoId = ytData.id;
+              }
+            } else {
+              const errTxt = await uploadRes.text();
+              console.error("YouTube server video PUT failed:", uploadRes.status, errTxt);
+              return NextResponse.json({
+                error: `YouTube video upload failed with status ${uploadRes.status}: ${errTxt}`,
+              }, { status: 400 });
+            }
+          } catch (putErr: any) {
+            console.error("Error streaming video bytes to YouTube:", putErr);
+            return NextResponse.json({
+              error: `Error streaming video bytes: ${putErr.message || String(putErr)}`,
+            }, { status: 500 });
+          }
+        } else if (sessionUrl) {
+          resumableUrl = sessionUrl;
         }
       }
 
@@ -177,7 +218,8 @@ export async function POST(request: Request) {
         _addedAt: Date.now(),
       };
 
-      try { saveCustomUserPost(uid, postObj); } catch (e) { console.warn("Save error:", e); }
+      // Real published video is fetched via API on sync, do not save local duplicate
+      // try { saveCustomUserPost(uid, postObj); } catch (e) { console.warn("Save error:", e); }
 
       return NextResponse.json({
         success: true,
@@ -229,6 +271,7 @@ export async function POST(request: Request) {
             publishedAt: postDate,
             _addedAt: Date.now(),
           };
+          // For X/Twitter Free Tier, we save the published tweet locally since the read API is restricted.
           try { saveCustomUserPost(uid, postObj); } catch (e) { console.warn("Save error:", e); }
           return NextResponse.json({
             success: true,
@@ -255,7 +298,27 @@ export async function POST(request: Request) {
 
       if (!isMock && accessToken) {
         const fbText = description ? `${title.trim()}\n\n${description}` : title.trim();
-        const result = await publishToFacebook(accessToken, fbText, mediaUrl || thumbnailUrl || undefined, mediaType || (mediaUrl || thumbnailUrl ? "image" : undefined));
+
+        // Prepare raw buffer if a file was uploaded via multipart
+        let rawFileBuffer: Buffer | undefined;
+        let rawFileName: string | undefined;
+        let rawFileMime: string | undefined;
+        if (videoFile) {
+          const arrBuf = await videoFile.arrayBuffer();
+          rawFileBuffer = Buffer.from(arrBuf);
+          rawFileName = videoFile.name;
+          rawFileMime = videoFile.type;
+        }
+
+        const result = await publishToFacebook(
+          accessToken,
+          fbText,
+          mediaUrl || thumbnailUrl || undefined,
+          mediaType || (mediaUrl || thumbnailUrl ? "image" : undefined),
+          rawFileBuffer,
+          rawFileName,
+          rawFileMime,
+        );
 
         if (result.success) {
           const postObj = {
@@ -264,7 +327,7 @@ export async function POST(request: Request) {
             title: fbText.slice(0, 120),
             description: description || "",
             url: result.url,
-            type: mediaType === "video" ? "video" : "post",
+            type: rawFileMime?.startsWith("video/") || mediaType === "video" ? "video" : (rawFileBuffer || mediaUrl ? "photo" : "post"),
             status: "active",
             privacyStatus: "public",
             category: "Social",
@@ -274,7 +337,8 @@ export async function POST(request: Request) {
             publishedAt: postDate,
             _addedAt: Date.now(),
           };
-          try { saveCustomUserPost(uid, postObj); } catch (e) { console.warn("Save error:", e); }
+          // Real published FB post is fetched via API on sync, do not save local duplicate
+          // try { saveCustomUserPost(uid, postObj); } catch (e) { console.warn("Save error:", e); }
           return NextResponse.json({
             success: true,
             message: "✓ Post published successfully to Facebook!",
@@ -291,6 +355,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Facebook is not connected or has no valid token. Please reconnect from the Connect page." }, { status: 401 });
       }
     }
+
 
     // ── Threads — real API publishing
     if (platform === "threads") {
@@ -323,7 +388,8 @@ export async function POST(request: Request) {
             publishedAt: postDate,
             _addedAt: Date.now(),
           };
-          try { saveCustomUserPost(uid, postObj); } catch (e) { console.warn("Save error:", e); }
+          // Real published Threads post is fetched via API on sync, do not save local duplicate
+          // try { saveCustomUserPost(uid, postObj); } catch (e) { console.warn("Save error:", e); }
           return NextResponse.json({
             success: true,
             message: "✓ Post published successfully to Threads!",
@@ -384,7 +450,8 @@ export async function POST(request: Request) {
             publishedAt: postDate,
             _addedAt: Date.now(),
           };
-          try { saveCustomUserPost(uid, postObj); } catch (e) { console.warn("Save error:", e); }
+          // Real published Instagram video is fetched via API on sync, do not save local duplicate
+          // try { saveCustomUserPost(uid, postObj); } catch (e) { console.warn("Save error:", e); }
           
           return NextResponse.json({
             success: true,
@@ -414,7 +481,8 @@ export async function POST(request: Request) {
             publishedAt: postDate,
             _addedAt: Date.now(),
           };
-          try { saveCustomUserPost(uid, postObj); } catch (e) { console.warn("Save error:", e); }
+          // Real published Instagram photo is fetched via API on sync, do not save local duplicate
+          // try { saveCustomUserPost(uid, postObj); } catch (e) { console.warn("Save error:", e); }
           return NextResponse.json({
             success: true,
             message: "✓ Post published successfully to Instagram!",

@@ -17,44 +17,41 @@ export async function POST(request: Request) {
     }
 
     // 1. Attempt to delete from origin platforms (Instagram / YouTube) if valid token exists
-    if (uid !== "demo-user") {
-      // Instagram origin deletion
-      if (platform === "instagram" || postId.startsWith("ig-")) {
-        try {
-          const secrets = await getUserConnectionSecrets(uid, "instagram");
-          const accessToken = typeof secrets?.accessToken === "string" ? secrets.accessToken : "";
-          if (accessToken && accessToken !== "mock-access-token" && !secrets?.mockConnection) {
-            const mediaId = postId.replace(/^(ig-live-|ig-custom-|ig-)/, "");
-            await fetch(`https://graph.instagram.com/v20.0/${mediaId}?access_token=${accessToken}`, {
-              method: "DELETE",
-            });
-          }
-        } catch (igErr) {
-          console.warn("Instagram origin deletion notice:", igErr);
+    if (platform === "instagram" || postId.startsWith("ig-")) {
+      try {
+        const secrets = await getUserConnectionSecrets(uid, "instagram");
+        const accessToken = typeof secrets?.accessToken === "string" ? secrets.accessToken : "";
+        if (accessToken && accessToken !== "mock-access-token" && !secrets?.mockConnection) {
+          const mediaId = postId.replace(/^(ig-live-|ig-custom-|ig-)/, "");
+          await fetch(`https://graph.instagram.com/v20.0/${mediaId}?access_token=${accessToken}`, {
+            method: "DELETE",
+          });
         }
+      } catch (igErr) {
+        console.warn("Instagram origin deletion notice:", igErr);
       }
+    }
 
-      // YouTube origin deletion
-      if (platform === "youtube" || postId.startsWith("yt-")) {
-        try {
-          const secrets = await getUserConnectionSecrets(uid, "youtube");
-          const accessToken = typeof secrets?.accessToken === "string" ? secrets.accessToken : "";
-          const isMockToken =
-            !accessToken ||
-            accessToken === "mock-access-token" ||
-            accessToken === "connected-access-token" ||
-            secrets?.mockConnection === true;
+    // YouTube origin deletion
+    if (platform === "youtube" || postId.startsWith("yt-")) {
+      try {
+        const secrets = await getUserConnectionSecrets(uid, "youtube");
+        const accessToken = typeof secrets?.accessToken === "string" ? secrets.accessToken : "";
+        const isMockToken =
+          !accessToken ||
+          accessToken === "mock-access-token" ||
+          accessToken === "connected-access-token" ||
+          secrets?.mockConnection === true;
 
-          if (!isMockToken && accessToken && !postId.startsWith("yt-live-") && !postId.startsWith("yt-demo-")) {
-            const ytVideoId = postId.replace(/^yt-/, "");
-            await fetch(`https://www.googleapis.com/youtube/v3/videos?id=${ytVideoId}`, {
-              method: "DELETE",
-              headers: { Authorization: `Bearer ${accessToken}` },
-            });
-          }
-        } catch (ytErr) {
-          console.warn("YouTube origin deletion notice:", ytErr);
+        if (!isMockToken && accessToken && !postId.startsWith("yt-live-") && !postId.startsWith("yt-demo-")) {
+          const ytVideoId = postId.replace(/^yt-/, "");
+          await fetch(`https://www.googleapis.com/youtube/v3/videos?id=${ytVideoId}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
         }
+      } catch (ytErr) {
+        console.warn("YouTube origin deletion notice:", ytErr);
       }
     }
 

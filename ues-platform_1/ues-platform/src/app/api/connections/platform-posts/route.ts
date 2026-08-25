@@ -72,6 +72,32 @@ function getConnectedFallbackPosts(platformId: string, accountName: string = "Co
         uesScore: 86,
         publishedAt: today,
       },
+      {
+        id: `ig-connected-2`,
+        platform: "instagram",
+        title: `Reel: 5 essential tips to level up your social media engagement in 2026 ✨`,
+        thumbnailUrl: "https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=600&auto=format&fit=crop&q=80",
+        url: `https://instagram.com/p/ig-connected-2`,
+        type: "reel",
+        status: "active",
+        privacyStatus: "public",
+        metrics: { likes: 3240, comments: 245, shares: 180, views: 42100, saves: 512, followerCount: 28400 },
+        uesScore: 92,
+        publishedAt: yesterday,
+      },
+      {
+        id: `ig-connected-3`,
+        platform: "instagram",
+        title: `Carousel: Comprehensive breakdown of cross-platform metrics & analytics 📊`,
+        thumbnailUrl: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=600&auto=format&fit=crop&q=80",
+        url: `https://instagram.com/p/ig-connected-3`,
+        type: "photo",
+        status: "active",
+        privacyStatus: "public",
+        metrics: { likes: 2180, comments: 156, shares: 94, views: 28900, saves: 340, followerCount: 28400 },
+        uesScore: 88,
+        publishedAt: new Date(Date.now() - 172800000).toISOString().slice(0, 10),
+      },
     ];
   }
 
@@ -155,9 +181,7 @@ export async function GET(request: Request) {
           const isMock = !accessToken || accessToken === "mock-access-token" || accessToken === "connected-access-token" || secrets?.mockConnection === true;
 
           if (isMock) {
-            if (platformId !== "facebook") {
-              posts.push(...getConnectedFallbackPosts(platformId, accountName));
-            }
+            // Suppress mock/fallback posts – real data only
             return;
           }
 
@@ -194,8 +218,6 @@ export async function GET(request: Request) {
 
               if (Array.isArray(tweets) && tweets.length > 0) {
                 fetched = true;
-                const activeIds = tweets.map((t: any) => String(t.id));
-                try { syncCustomPostsWithLiveOrigin(uid, "x", activeIds); } catch {}
                 tweets.forEach((tweet: any) => {
                   posts.push({
                     id: `x-live-${tweet.id}`,
@@ -229,22 +251,21 @@ export async function GET(request: Request) {
 
           } else if (platformId === "instagram") {
             try {
-              if (!conn?.accountId) throw new Error("Missing Instagram account ID");
-              const media = await fetchInstagramRecentMedia(conn.accountId, accessToken, 100);
-              if (Array.isArray(media)) {
+              const accountId = conn?.accountId || "me";
+              const media = await fetchInstagramRecentMedia(accountId, accessToken, 25);
+              if (Array.isArray(media) && media.length > 0) {
                 fetched = true;
-                const activeIds = media.map((m: any) => String(m.id));
-                try {
-                  syncCustomPostsWithLiveOrigin(uid, "instagram", activeIds);
-                } catch {}
                 media.forEach((item: any) => {
                   const type =
                     item.mediaType === "VIDEO" ? "video" :
                     item.mediaType === "CAROUSEL_ALBUM" ? "reel" : "photo";
+                  const views = item.views ?? null;
+                  const shares = item.shares ?? null;
+                  const saves = item.saved ?? null;
                   posts.push({
                     id: `ig-live-${item.id}`,
                     platform: "instagram",
-                    title: item.caption?.slice(0, 120) || "Instagram Post",
+                    title: item.caption?.slice(0, 120) || "Instagram Content",
                     thumbnailUrl: item.thumbnailUrl || null,
                     url: item.permalink || null,
                     type,
@@ -253,12 +274,12 @@ export async function GET(request: Request) {
                     metrics: {
                       likes: item.likes,
                       comments: item.comments,
-                      shares: 0,
-                      views: item.likes * 10,
-                      saves: 0,
+                      shares: shares,
+                      views: views,
+                      saves: saves,
                       followerCount: item.followerCount || 0,
                     },
-                    uesScore: computeUES(item.likes * 10, item.likes, item.comments),
+                    uesScore: computeUES(views || 0, item.likes, item.comments, shares || 0),
                     publishedAt: item.publishedAt
                       ? new Date(item.publishedAt).toISOString().slice(0, 10)
                       : new Date().toISOString().slice(0, 10),
@@ -276,8 +297,6 @@ export async function GET(request: Request) {
               const fbPosts = await fetchFacebookRecentPosts(accessToken, 20);
               if (Array.isArray(fbPosts)) {
                 fetched = true;
-                const activeIds = fbPosts.map((item: any) => String(item.id));
-                try { syncCustomPostsWithLiveOrigin(uid, "facebook", activeIds); } catch {}
                 fbPosts.forEach((item: any) => {
                   const viewEstimate = (item.likes || 0) * 8 + (item.shares || 0) * 15;
                   posts.push({
@@ -387,9 +406,7 @@ export async function GET(request: Request) {
             }
           }
 
-          if (!fetched) {
-            posts.push(...getConnectedFallbackPosts(platformId, accountName));
-          }
+          // No fallback posts – real data only (or empty for platforms with no posts)
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           console.warn(`[platform-posts] Platform task failed for ${platformId}:`, msg);

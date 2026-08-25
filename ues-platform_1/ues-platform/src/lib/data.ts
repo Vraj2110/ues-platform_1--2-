@@ -312,10 +312,11 @@ export function getUESGradeColor(score: number): string {
   return "#FF6B6B";
 }
 
-export function formatNumber(n: number): string {
+export function formatNumber(n: number | null | undefined): string {
+  if (n === null || n === undefined || typeof n !== "number" || n < 0 || isNaN(n)) return "N/A";
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return n.toString();
+  return n.toLocaleString();
 }
 
 import { DashboardOverview, PlatformOverview } from "@/types";

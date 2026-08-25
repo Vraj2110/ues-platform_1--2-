@@ -137,41 +137,19 @@ export async function POST(request: Request) {
 
     const createData = await createRes.json();
 
-    if (!createRes.ok || createRes.status === 401 || createData.error?.type === "OAuthException") {
+    if (!createRes.ok) {
       const errorMsg = createData.error?.message || "Failed to create media container.";
+      const isAuthError = createRes.status === 401 || createData.error?.code === 190 || createData.error?.type === "OAuthException";
       
-      // MOCK FALLBACK FOR LOCAL TESTING:
-      // If the Instagram Graph API rejects the token (which is common for test accounts without full permissions in the Meta Developer Console)
-      // we mock the success so the user can still see the post in the dashboard.
-      console.warn("Instagram Graph API Error, falling back to mock publish:", errorMsg);
-      
-      const mockPostId = `ig-mock-${Date.now()}`;
-      const mockPost = {
-        id: mockPostId,
-        platform: "instagram" as const,
-        title: caption ? caption.slice(0, 120) : "Instagram Post (Mock)",
-        description: caption || "",
-        url: `https://instagram.com/p/${mockPostId}`,
-        type: mediaType === "video" ? ("video" as const) : ("photo" as const),
-        status: "active" as const,
-        privacyStatus: "public",
-        category: "Social",
-        thumbnailUrl: mediaUrl,
-        metrics: { likes: 0, comments: 0, shares: 0, views: 0, saves: 0, followerCount: 0 },
-        uesScore: 78,
-        publishedAt: new Date().toISOString().slice(0, 10),
-        _addedAt: Date.now(),
-      };
-      
-      await saveCustomUserPost(uid, mockPost);
-      
+      if (isAuthError) {
+        return NextResponse.json({
+          error: "🔒 Instagram connection expired. Please reconnect your Instagram connection on the Connect page."
+        }, { status: 401 });
+      }
+
       return NextResponse.json({
-        success: true,
-        message: "✓ Successfully published to Instagram (Mocked for testing)!",
-        mediaId: mockPostId,
-        url: mockPost.url,
-        post: mockPost,
-      });
+        error: `Instagram API Error: ${errorMsg}`
+      }, { status: 400 });
     }
 
     console.log('createData:', createData);
@@ -242,7 +220,8 @@ export async function POST(request: Request) {
               _addedAt: Date.now(),
             };
 
-            await saveCustomUserPost(uid, postObj);
+            // Real published post is fetched via API on sync, do not save local duplicate
+            // await saveCustomUserPost(uid, postObj);
             return { platformPostId, postUrl, postObj };
           } else {
             const errorMsg = publishData.error?.message || "";
@@ -286,7 +265,8 @@ export async function POST(request: Request) {
       };
 
       try {
-        await saveCustomUserPost(uid, processingPost);
+        // Real published post is fetched via API on sync, do not save local duplicate
+        // await saveCustomUserPost(uid, processingPost);
       } catch (e) {
         console.warn("Failed to save processing post to Firebase:", e);
       }

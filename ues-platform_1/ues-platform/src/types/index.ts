@@ -33,12 +33,13 @@ export type PostType =
 export type PostStatus = "active" | "archived" | "draft";
 
 export interface PostMetrics {
-  likes: number;
-  comments: number;
-  shares: number;
-  views: number;
-  saves: number;
-  followerCount: number;
+  likes?: number | null;
+  comments?: number | null;
+  shares?: number | null;
+  views?: number | null;
+  saves?: number | null;
+  followerCount?: number | null;
+  metricsUpdatedAt?: string;
 }
 
 export interface AIAnalysis {
@@ -212,3 +213,48 @@ export interface DashboardOverview {
   averageScore: number;
   bestPlatform: string;
 }
+
+// ─── Cross-Platform Synchronization Types ────────────────────────────────────
+
+export type SyncStatus = "published" | "uploading" | "failed" | "deleting" | "deleted";
+export type PlatformSyncStatus = "success" | "failed" | "auth_required" | "rate_limited";
+
+export interface SynchronizedPost {
+  internalPostId: string;
+  platform: PlatformId;
+  platformPostId: string;
+  accountId: string;
+  title: string;
+  description?: string;
+  url?: string;
+  thumbnailUrl?: string;
+  type: PostType;
+  status: SyncStatus;
+  privacyStatus?: string;
+  metrics: PostMetrics;
+  uesScore: number;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string | null;
+  lastSyncedAt: string;
+}
+
+export interface PlatformSyncResult {
+  platformId: PlatformId;
+  status: PlatformSyncStatus;
+  checkedCount: number;
+  newCount: number;
+  updatedCount: number;
+  deletedCount: number;
+  errorMessage?: string;
+}
+
+export interface SyncReport {
+  timestamp: string;
+  totalChecked: number;
+  totalNew: number;
+  totalUpdated: number;
+  totalDeleted: number;
+  platformResults: Record<string, PlatformSyncResult>;
+}
+
