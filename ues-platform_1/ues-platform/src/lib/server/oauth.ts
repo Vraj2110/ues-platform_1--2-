@@ -936,7 +936,7 @@ export async function fetchFacebookProfile(accessToken: string) {
 export function getThreadsOAuthUrl(state: string, redirectUri?: string) {
   const params = new URLSearchParams({
     client_id: getEnv("THREADS_CLIENT_ID"),
-    redirect_uri: redirectUri ?? getEnv("THREADS_REDIRECT_URI", "http://localhost:3000/api/connections/oauth-callback"),
+    redirect_uri: redirectUri ?? getEnv("THREADS_REDIRECT_URI", "https://localhost:3001/api/connections/oauth-callback"),
     scope: "threads_basic,threads_content_publish",
     response_type: "code",
     state,
@@ -951,7 +951,7 @@ export async function exchangeThreadsCode(code: string, redirectUri?: string) {
     client_id: clientId,
     client_secret: clientSecret,
     grant_type: "authorization_code",
-    redirect_uri: redirectUri ?? getEnv("THREADS_REDIRECT_URI", "http://localhost:3000/api/connections/oauth-callback"),
+    redirect_uri: redirectUri ?? getEnv("THREADS_REDIRECT_URI", "https://localhost:3001/api/connections/oauth-callback"),
     code,
   });
   const res = await fetch(THREADS_TOKEN_URL, { method: "POST", body });
