@@ -64,6 +64,22 @@ Ask me questions like:
   const [loadingStep, setLoadingStep] = useState(0);
   const [activeWorksheet, setActiveWorksheet] = useState<string | null>(null);
 
+  const [geminiKey, setGeminiKey] = useState("");
+  const [hasServerKey, setHasServerKey] = useState(false);
+
+  // Load key from localStorage on mount and check server key status
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedKey = localStorage.getItem("ues_gemini_api_key");
+      if (savedKey) setGeminiKey(savedKey);
+    }
+
+    fetch("/api/ai/status")
+      .then(res => res.json())
+      .then(data => setHasServerKey(!!data.hasServerKey))
+      .catch(err => console.error("Error checking AI status:", err));
+  }, []);
+
   // Modal State for Generate Report
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
@@ -91,100 +107,304 @@ Ask me questions like:
     return () => timers.forEach(clearTimeout);
   }, [loading]);
 
-  // Inline Style Parser (handles **bold**)
+  // Inline Style Parser (handles **bold** and `code`)
   function parseInlineStyles(text: string) {
-    const parts = text.split(/\*\*([^*]+)\*\*/g);
-    return parts.map((part, index) => {
-      if (index % 2 === 1) {
-        return (
-          <strong key={index} className="font-extrabold text-white font-display">
-            {part}
+    const boldParts = text.split(/\*\*([^*]+)\*\*/g);
+    return boldParts.flatMap((boldPart, boldIndex) => {
+      if (boldIndex % 2 === 1) {
+        return [
+          <strong key={`b-${boldIndex}`} className="font-extrabold text-white font-display">
+            {boldPart}
           </strong>
-        );
+        ];
       }
-      return part;
+      const codeParts = boldPart.split(/`([^`]+)`/g);
+      return codeParts.map((codePart, codeIndex) => {
+        if (codeIndex % 2 === 1) {
+          return (
+            <code key={`c-${boldIndex}-${codeIndex}`} className="px-1.5 py-0.5 rounded bg-teal-dark/60 border border-cyan-border/10 font-mono text-cyan-ues text-xs">
+              {codePart}
+            </code>
+          );
+        }
+        return codePart;
+      });
     });
   }
 
-  // Robust Line-Level Markdown Parser (Prevents text dropping bugs)
+  // Robust Stateful Markdown Parser
   function renderMarkdown(text: string) {
-    const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
-    return lines.map((line, idx) => {
-      // Heading 4
-      if (line.startsWith("#### ")) {
+    if (!text) return null;
+
+    const rawLines = text.split("\n");
+    const elements: React.ReactNode[] = [];
+    
+    let currentBlock: {
+      type: "code" | "table" | "list" | "numlist" | "blockquote" | "paragraph" | null;
+      content: string[];
+      meta?: any;
+    } = { type: null, content: [] };
+
+    let keyCounter = 0;
+
+    const flushBlock = (key: number) => {
+      if (!currentBlock.type || currentBlock.content.length === 0) return null;
+
+      const blockText = currentBlock.content.join("\n");
+      const type = currentBlock.type;
+      currentBlock = { type: null, content: [] };
+
+      if (type === "code") {
+        const codeLang = currentBlock.meta || "";
         return (
-          <h5 key={idx} className="font-display font-bold text-xs uppercase tracking-wider mt-4 mb-2 text-cyan-ues">
-            {parseInlineStyles(line.slice(5))}
-          </h5>
-        );
-      }
-      // Heading 3
-      if (line.startsWith("### ")) {
-        return (
-          <h4 key={idx} className="font-display font-bold text-[15px] mt-5 mb-2.5 text-white tracking-wide border-b border-cyan-border/5 pb-1">
-            {parseInlineStyles(line.slice(4))}
-          </h4>
-        );
-      }
-      // Heading 2
-      if (line.startsWith("## ")) {
-        return (
-          <h3 key={idx} className="font-display font-extrabold text-base mt-6 mb-3.5 text-cyan-ues border-b border-cyan-border/10 pb-1.5">
-            {parseInlineStyles(line.slice(3))}
-          </h3>
-        );
-      }
-      // Heading 1
-      if (line.startsWith("# ")) {
-        return (
-          <h2 key={idx} className="font-display font-black text-lg mt-7 mb-4.5 text-cyan-ues">
-            {parseInlineStyles(line.slice(2))}
-          </h2>
+          <div key={key} className="my-4 rounded-xl overflow-hidden border border-cyan-border/20 bg-teal-dark/60 font-mono text-xs">
+            <div className="flex justify-between items-center px-4 py-1.5 bg-[#0b191c]/80 border-b border-cyan-border/10 text-mint-700 select-none">
+              <span>{codeLang || "code"}</span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  navigator.clipboard.writeText(blockText);
+                  const btn = e.currentTarget;
+                  btn.textContent = "Copied!";
+                  setTimeout(() => { btn.textContent = "Copy"; }, 2000);
+                }}
+                className="hover:text-cyan-ues transition-colors"
+              >
+                Copy
+              </button>
+            </div>
+            <pre className="p-4 overflow-x-auto text-[#e2e8f0] leading-relaxed">
+              <code>{blockText}</code>
+            </pre>
+          </div>
         );
       }
 
-      // Horizontal Rule
-      if (line === "---") {
-        return <hr key={idx} className="border-cyan-border/10 my-4" />;
+      if (type === "table") {
+        const rows = blockText.split("\n").map(r => r.trim()).filter(r => r.startsWith("|") && r.endsWith("|"));
+        if (rows.length === 0) return null;
+
+        const headers = rows[0]
+          .split("|")
+          .slice(1, -1)
+          .map(h => h.trim());
+
+        let startIndex = 1;
+        if (rows[1] && /^\|[\s-:]+\|/.test(rows[1])) {
+          startIndex = 2;
+        }
+
+        const bodyRows = rows.slice(startIndex).map(row => 
+          row
+            .split("|")
+            .slice(1, -1)
+            .map(cell => cell.trim())
+        );
+
+        return (
+          <div key={key} className="my-4 overflow-x-auto rounded-xl border border-cyan-border/20 bg-teal-surface/20 shadow-sm">
+            <table className="min-w-full divide-y divide-cyan-border/10 text-xs">
+              <thead className="bg-[#0b191c]/40">
+                <tr>
+                  {headers.map((h, i) => (
+                    <th key={i} className="px-4 py-3 text-left font-display font-semibold text-cyan-ues uppercase tracking-wider">
+                      {parseInlineStyles(h)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-cyan-border/5 bg-teal-card/10">
+                {bodyRows.map((row, ri) => (
+                  <tr key={ri} className="hover:bg-teal-surface/30 transition-colors">
+                    {row.map((cell, ci) => (
+                      <td key={ci} className="px-4 py-2.5 text-[#F7FFF7]/90 leading-relaxed">
+                        {parseInlineStyles(cell)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
       }
 
-      // Blockquote
-      if (line.startsWith("> ")) {
+      if (type === "blockquote") {
         return (
-          <blockquote key={idx} className="border-l-2 border-cyan-ues pl-4 py-1.5 my-3 bg-cyan-light/[0.03] text-sm text-mint-700 italic rounded-r-xl">
-            {parseInlineStyles(line.slice(2))}
+          <blockquote key={key} className="border-l-2 border-cyan-ues pl-4 py-1.5 my-3 bg-cyan-light/[0.03] text-sm text-mint-700 italic rounded-r-xl">
+            {parseInlineStyles(blockText)}
           </blockquote>
         );
       }
 
-      // Bullet List Items
-      if (line.startsWith("* ") || line.startsWith("- ")) {
+      if (type === "list") {
         return (
-          <div key={idx} className="flex gap-2 text-sm text-[#F7FFF7]/90 pl-4 relative my-1.5">
-            <span className="absolute left-1 top-2.5 w-1.5 h-1.5 rounded-full bg-cyan-ues" />
-            <span className="leading-relaxed">{parseInlineStyles(line.slice(2))}</span>
-          </div>
+          <ul key={key} className="my-2.5 space-y-1.5">
+            {currentBlock.content.map((item, i) => {
+              const isSub = item.startsWith("  ") || item.startsWith("\t");
+              const cleanItem = item.trim().replace(/^[*+-]\s+/, "");
+              return (
+                <li key={i} className={`flex gap-2 text-sm text-[#F7FFF7]/90 relative my-1.5 ${isSub ? "pl-8" : "pl-4"}`}>
+                  <span className={`absolute ${isSub ? "left-5" : "left-1"} top-2.5 w-1.5 h-1.5 rounded-full ${isSub ? "border border-cyan-ues bg-transparent" : "bg-cyan-ues"}`} />
+                  <span className="leading-relaxed">{parseInlineStyles(cleanItem)}</span>
+                </li>
+              );
+            })}
+          </ul>
         );
       }
 
-      // Numbered List Items
-      const numMatch = line.match(/^(\d+)\.\s(.*)/);
-      if (numMatch) {
+      if (type === "numlist") {
         return (
-          <div key={idx} className="flex gap-2 text-sm text-[#F7FFF7]/90 pl-4 relative my-1.5">
-            <span className="font-mono text-cyan-ues text-xs font-semibold">{numMatch[1]}.</span>
-            <span className="leading-relaxed">{parseInlineStyles(numMatch[2])}</span>
-          </div>
+          <ol key={key} className="my-2.5 space-y-1.5">
+            {currentBlock.content.map((item, i) => {
+              const numMatch = item.trim().match(/^(\d+)\.\s(.*)/);
+              const isSub = item.startsWith("  ") || item.startsWith("\t");
+              const num = numMatch ? numMatch[1] : (i + 1).toString();
+              const text = numMatch ? numMatch[2] : item.trim();
+              return (
+                <li key={i} className={`flex gap-2 text-sm text-[#F7FFF7]/90 relative my-1.5 ${isSub ? "pl-8" : "pl-4"}`}>
+                  <span className={`font-mono text-cyan-ues text-xs font-semibold ${isSub ? "pl-4" : ""}`}>{num}.</span>
+                  <span className="leading-relaxed">{parseInlineStyles(text)}</span>
+                </li>
+              );
+            })}
+          </ol>
         );
       }
 
-      // Regular Paragraph
       return (
-        <p key={idx} className="text-sm text-[#F7FFF7]/95 leading-relaxed my-2 font-normal">
-          {parseInlineStyles(line)}
+        <p key={key} className="text-sm text-[#F7FFF7]/95 leading-relaxed my-3 font-normal">
+          {parseInlineStyles(blockText)}
         </p>
       );
-    });
+    };
+
+    for (let i = 0; i < rawLines.length; i++) {
+      const line = rawLines[i];
+      const trimmed = line.trim();
+
+      if (trimmed.startsWith("```")) {
+        if (currentBlock.type === "code") {
+          const block = flushBlock(keyCounter++);
+          if (block) elements.push(block);
+        } else {
+          const block = flushBlock(keyCounter++);
+          if (block) elements.push(block);
+          currentBlock.type = "code";
+          currentBlock.meta = trimmed.slice(3).trim();
+        }
+        continue;
+      }
+
+      if (currentBlock.type === "code") {
+        currentBlock.content.push(line);
+        continue;
+      }
+
+      if (!trimmed) {
+        const block = flushBlock(keyCounter++);
+        if (block) elements.push(block);
+        continue;
+      }
+
+      if (trimmed.startsWith("# ") || trimmed.startsWith("## ") || trimmed.startsWith("### ") || trimmed.startsWith("#### ")) {
+        const block = flushBlock(keyCounter++);
+        if (block) elements.push(block);
+
+        let headerEl;
+        if (trimmed.startsWith("#### ")) {
+          headerEl = (
+            <h5 key={keyCounter++} className="font-display font-bold text-xs uppercase tracking-wider mt-4 mb-2 text-cyan-ues">
+              {parseInlineStyles(trimmed.slice(5))}
+            </h5>
+          );
+        } else if (trimmed.startsWith("### ")) {
+          headerEl = (
+            <h4 key={keyCounter++} className="font-display font-bold text-[15px] mt-5 mb-2.5 text-white tracking-wide border-b border-cyan-border/5 pb-1">
+              {parseInlineStyles(trimmed.slice(4))}
+            </h4>
+          );
+        } else if (trimmed.startsWith("## ")) {
+          headerEl = (
+            <h3 key={keyCounter++} className="font-display font-extrabold text-base mt-6 mb-3.5 text-cyan-ues border-b border-cyan-border/10 pb-1.5">
+              {parseInlineStyles(trimmed.slice(3))}
+            </h3>
+          );
+        } else {
+          headerEl = (
+            <h2 key={keyCounter++} className="font-display font-black text-lg mt-7 mb-4.5 text-cyan-ues">
+              {parseInlineStyles(trimmed.slice(2))}
+            </h2>
+          );
+        }
+        elements.push(headerEl);
+        continue;
+      }
+
+      if (trimmed === "---") {
+        const block = flushBlock(keyCounter++);
+        if (block) elements.push(block);
+        elements.push(<hr key={keyCounter++} className="border-cyan-border/10 my-4" />);
+        continue;
+      }
+
+      if (trimmed.startsWith("> ")) {
+        if (currentBlock.type !== "blockquote") {
+          const block = flushBlock(keyCounter++);
+          if (block) elements.push(block);
+          currentBlock.type = "blockquote";
+        }
+        currentBlock.content.push(trimmed.slice(2));
+        continue;
+      }
+
+      if (trimmed.startsWith("|")) {
+        if (currentBlock.type !== "table") {
+          const block = flushBlock(keyCounter++);
+          if (block) elements.push(block);
+          currentBlock.type = "table";
+        }
+        currentBlock.content.push(line);
+        continue;
+      }
+
+      if (trimmed.startsWith("* ") || trimmed.startsWith("- ")) {
+        if (currentBlock.type !== "list") {
+          const block = flushBlock(keyCounter++);
+          if (block) elements.push(block);
+          currentBlock.type = "list";
+        }
+        currentBlock.content.push(line);
+        continue;
+      }
+
+      const numMatch = trimmed.match(/^\d+\.\s/);
+      if (numMatch) {
+        if (currentBlock.type !== "numlist") {
+          const block = flushBlock(keyCounter++);
+          if (block) elements.push(block);
+          currentBlock.type = "numlist";
+        }
+        currentBlock.content.push(line);
+        continue;
+      }
+
+      if (currentBlock.type !== "paragraph" && currentBlock.type !== null) {
+        const block = flushBlock(keyCounter++);
+        if (block) elements.push(block);
+      }
+      
+      if (currentBlock.type === null) {
+        currentBlock.type = "paragraph";
+      }
+      currentBlock.content.push(trimmed);
+    }
+
+    const lastBlock = flushBlock(keyCounter++);
+    if (lastBlock) elements.push(lastBlock);
+
+    return elements;
   }
 
   // Ask AI analyst
@@ -209,6 +429,7 @@ Ask me questions like:
         headers: {
           "Content-Type": "application/json",
           ...(token ? { authorization: `Bearer ${token}` } : {}),
+          ...(geminiKey ? { "x-gemini-api-key": geminiKey } : {}),
         },
         body: JSON.stringify({
           message: text,
@@ -273,6 +494,7 @@ Ask me questions like:
         headers: {
           "Content-Type": "application/json",
           ...(token ? { authorization: `Bearer ${token}` } : {}),
+          ...(geminiKey ? { "x-gemini-api-key": geminiKey } : {}),
         },
         body: JSON.stringify({
           isReport: true,
@@ -373,12 +595,46 @@ Ask me questions like:
           {/* Model indicator box */}
           <div className="p-5 border-t border-cyan-border/5 bg-teal-surface/10 space-y-3">
             <div className="flex items-center gap-2 text-xs font-semibold text-mint">
-              <span className="w-2 h-2 rounded-full bg-cyan-ues animate-pulse" />
-              Gemini 1.5 Flash Model
+              <span className={`w-2.5 h-2.5 rounded-full ${hasServerKey || geminiKey ? "bg-cyan-ues animate-pulse" : "bg-amber-500"}`} />
+              {hasServerKey
+                ? "Gemini 1.5 Flash (Server Active)"
+                : geminiKey
+                ? "Gemini 1.5 Flash (User Key)"
+                : "Local Fallback Active"}
             </div>
             <p className="text-[10px] text-mint-700/80 leading-normal">
-              Scoring is calculated mathematically by the platform engine. The LLM acts solely as a performance interpreter.
+              {hasServerKey || geminiKey
+                ? "Gemini AI is analyzing metrics and historical trends in real-time."
+                : "Enter a Gemini API Key below to unlock live AI analysis of metrics and growth diagnostics."}
             </p>
+            
+            <div className="space-y-1.5 pt-1.5 border-t border-cyan-border/5">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-cyan-ues flex items-center justify-between">
+                <span>Gemini API Key</span>
+                {geminiKey && (
+                  <button 
+                    onClick={() => {
+                      setGeminiKey("");
+                      localStorage.removeItem("ues_gemini_api_key");
+                    }}
+                    className="text-[9px] text-pink-ues hover:underline normal-case font-normal"
+                  >
+                    Clear
+                  </button>
+                )}
+              </label>
+              <input
+                type="password"
+                placeholder={hasServerKey ? "Using server key..." : "Paste Gemini API Key..."}
+                value={geminiKey}
+                disabled={hasServerKey}
+                onChange={(e) => {
+                  setGeminiKey(e.target.value);
+                  localStorage.setItem("ues_gemini_api_key", e.target.value);
+                }}
+                className="w-full bg-[#0b191c]/80 border border-cyan-border/20 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-cyan-ues text-mint placeholder:text-mint-700/40 disabled:opacity-50"
+              />
+            </div>
           </div>
         </aside>
 

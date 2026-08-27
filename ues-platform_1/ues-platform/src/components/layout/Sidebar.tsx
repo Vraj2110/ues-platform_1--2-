@@ -6,6 +6,17 @@ import { usePathname, useRouter } from "next/navigation";
 import { signOut } from "firebase/auth";
 import { cn } from "@/lib/utils";
 import { auth } from "@/lib/firebase";
+import { 
+  LayoutDashboard, 
+  Link2, 
+  FileText, 
+  PlusCircle, 
+  Award, 
+  BarChart3, 
+  Bot, 
+  User, 
+  LogOut 
+} from "lucide-react";
 
 interface NavItem {
   href: string;
@@ -30,12 +41,28 @@ const SCORING_NAV: NavItem[] = [
   { href: "/insights", icon: "🤖", label: "AI Insights", badge: 3 },
 ];
 
+function SidebarIcon({ name, className }: { name: string; className?: string }) {
+  const cnClass = className || "w-5 h-5 transition-transform duration-200 group-hover:scale-110";
+  switch (name) {
+    case "📊": return <LayoutDashboard className={cnClass} />;
+    case "🔗": return <Link2 className={cnClass} />;
+    case "📝": return <FileText className={cnClass} />;
+    case "✚": return <PlusCircle className={cnClass} />;
+    case "⭐": return <Award className={cnClass} />;
+    case "📈": return <BarChart3 className={cnClass} />;
+    case "🤖": return <Bot className={cnClass} />;
+    case "👤": return <User className={cnClass} />;
+    case "🚪": return <LogOut className={cnClass} />;
+    default: return <span className="w-5 text-center">{name}</span>;
+  }
+}
+
 function NavSection({ label, items }: { label: string; items: NavItem[] }) {
   const pathname = usePathname();
 
   return (
     <div className="px-3 pt-5 pb-2">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-mint-300 px-2 mb-1.5">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-mint-300/50 px-2 mb-1.5">
         {label}
       </p>
       {items.map((item) => (
@@ -43,17 +70,19 @@ function NavSection({ label, items }: { label: string; items: NavItem[] }) {
           key={item.href}
           href={item.href}
           className={cn(
-            "flex items-center gap-2.5 px-3 py-2.5 rounded-xl cursor-pointer",
-            "text-sm font-medium transition-all duration-200 no-underline mb-0.5",
+            "flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer group no-underline mb-0.5",
+            "text-sm font-medium transition-all duration-200",
             pathname ? (pathname === item.href || pathname.startsWith(item.href + "/")) : false
-              ? "bg-cyan-mid text-cyan-ues"
+              ? "bg-cyan-mid text-cyan-ues shadow-sm shadow-cyan-mid/10"
               : "text-mint-700 hover:bg-cyan-light hover:text-[var(--color-mint)]"
           )}
         >
-          <span className="w-5 text-center text-base leading-none">{item.icon}</span>
+          <span className="w-5 flex items-center justify-center text-center">
+            <SidebarIcon name={item.icon} />
+          </span>
           <span className="flex-1">{item.label}</span>
           {item.badge && (
-            <span className="bg-pink-ues text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full ml-auto">
+            <span className="bg-pink-ues text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full ml-auto shadow-sm shadow-pink-ues/15">
               {item.badge}
             </span>
           )}
@@ -97,10 +126,15 @@ export function Sidebar() {
       {/* Logo */}
       <Link
         href="/"
-        className="flex items-center gap-2 px-5 py-6 font-display font-extrabold text-lg border-b border-cyan-border/8 text-[var(--color-mint)] no-underline"
+        className="flex items-center gap-2.5 px-5 py-6 font-display font-extrabold text-lg border-b border-cyan-border/8 text-[var(--color-mint)] no-underline group"
       >
-        <span className="w-2 h-2 rounded-full bg-pink-ues flex-shrink-0" />
-        UES<span className="text-cyan-ues">Platform</span>
+        <div className="relative w-8 h-8 flex items-center justify-center bg-gradient-to-tr from-pink-ues via-purple-600 to-cyan-ues rounded-xl shadow-lg shadow-pink-ues/20 flex-shrink-0">
+          <span className="font-display font-black text-white text-base tracking-tighter">U</span>
+          <div className="absolute -inset-0.5 bg-gradient-to-tr from-pink-ues to-cyan-ues rounded-xl blur-sm opacity-20 group-hover:opacity-60 transition duration-300"></div>
+        </div>
+        <span className="font-display font-extrabold text-[var(--color-mint)] tracking-tight">
+          UES<span className="bg-gradient-to-r from-cyan-ues to-mint-300 bg-clip-text text-transparent font-medium ml-0.5">Platform</span>
+        </span>
       </Link>
 
       {/* Navigation */}
@@ -115,17 +149,21 @@ export function Sidebar() {
       <div className="px-3 pb-4 border-t border-cyan-border/8 pt-3">
         <Link
           href="/profile"
-          className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium text-mint-700 hover:bg-cyan-light hover:text-[var(--color-mint)] transition-all duration-200 no-underline mb-0.5"
+          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-mint-700 hover:bg-cyan-light hover:text-[var(--color-mint)] transition-all duration-200 no-underline mb-0.5 group"
         >
-          <span className="w-5 text-center">👤</span>
+          <span className="w-5 flex items-center justify-center text-center">
+            <SidebarIcon name="👤" />
+          </span>
           Profile
         </Link>
         <button
           type="button"
           onClick={handleLogout}
-          className="flex w-full items-center gap-2.5 px-3 py-2.5 rounded-xl text-left text-sm font-medium text-pink-ues/70 hover:bg-pink-light hover:text-pink-ues transition-all duration-200 mb-3"
+          className="flex w-full items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm font-medium text-pink-ues/70 hover:bg-pink-light hover:text-pink-ues transition-all duration-200 mb-3 group"
         >
-          <span className="w-5 text-center">🚪</span>
+          <span className="w-5 flex items-center justify-center text-center">
+            <SidebarIcon name="🚪" className="w-5 h-5 text-pink-ues/70 group-hover:text-pink-ues group-hover:scale-110 transition-all duration-200" />
+          </span>
           Logout
         </button>
 

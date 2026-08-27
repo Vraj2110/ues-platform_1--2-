@@ -749,7 +749,7 @@ ${best ? `* **Leading channel:** **${best.platformName}** (UES: ${best.ues}/100,
     if (!stats) return `### ⚠️ Platform Not Found\n**${platLabel(platformId)}** is not in your connected accounts or has no synced data.`;
 
     if (hasFollowers) {
-      const count = stats.followers;
+      const count = Number(stats.followers) || 0;
       const label = platformId === "youtube" ? "subscribers" : "followers";
       if (!count || count === 0) return `### 👥 ${platLabel(platformId)} Audience\nFollower data for **${platLabel(platformId)}** is currently unavailable. Check your connection sync status.`;
       return `### 👥 ${platLabel(platformId)} Audience
@@ -760,12 +760,13 @@ ${count < 1000 ? "**Tip:** Post consistently (4-5×/week) and collaborate with s
     }
 
     if (hasViews) {
-      const reach = stats.reach;
+      const reach = Number(stats.reach) || 0;
+      const followers = Number(stats.followers) || 0;
       if (!reach || reach === 0) return `### 📈 ${platLabel(platformId)} Reach\nReach data for **${platLabel(platformId)}** is currently unavailable. Sync your account to view this metric.`;
-      const ratio = stats.followers > 0 ? (reach / stats.followers).toFixed(1) : "N/A";
+      const ratio = followers > 0 ? (reach / followers).toFixed(1) : "N/A";
       return `### 📈 ${platLabel(platformId)} ${platformId === "youtube" ? "Views" : "Reach"}
 Your total ${platformId === "youtube" ? "views" : "reach"} on **${platLabel(platformId)}** this period: **${fmt(reach)}**
-* **Followers:** ${fmt(stats.followers)} | **Posts:** ${stats.totalPosts} | **Engagement Rate:** ${stats.engagementRate}
+* **Followers:** ${fmt(followers)} | **Posts:** ${stats.totalPosts} | **Engagement Rate:** ${stats.engagementRate}
 * **Reach-to-Follower ratio:** ${ratio}× — ${Number(ratio) > 2 ? "excellent, your content reaches beyond your followers" : "low, post more Reels/Shorts to expand discovery reach"}`;
     }
 
@@ -785,11 +786,12 @@ ${stats.totalPosts < 5 ? "**Warning:** Less than 5 posts is too low. Aim for 12-
     }
 
     if (hasScore) {
+      const uesVal = Number(stats.ues) || 0;
       return `### ⭐ ${platLabel(platformId)} Performance Score
-**UES Score: ${stats.ues}/100** ${stats.ues >= 80 ? "(Excellent)" : stats.ues >= 60 ? "(Good)" : stats.ues >= 40 ? "(Average)" : "(Needs Improvement)"}
+**UES Score: ${uesVal}/100** ${uesVal >= 80 ? "(Excellent)" : uesVal >= 60 ? "(Good)" : uesVal >= 40 ? "(Average)" : "(Needs Improvement)"}
 * **Engagement Rate:** ${stats.engagementRate} | **Followers:** ${fmt(stats.followers)} | **Posts:** ${stats.totalPosts}
 
-${stats.ues < 60 ? "**Action:** Below 60 means underperforming. Fix hook quality and increase posting frequency." : stats.ues < 80 ? "**Action:** Push to Excellent by increasing share-worthy content and fast comment responses." : "**Action:** Excellent! Focus on audience growth to maximize the impact of this strong score."}`;
+${uesVal < 60 ? "**Action:** Below 60 means underperforming. Fix hook quality and increase posting frequency." : uesVal < 80 ? "**Action:** Push to Excellent by increasing share-worthy content and fast comment responses." : "**Action:** Excellent! Focus on audience growth to maximize the impact of this strong score."}`;
     }
   }
 
@@ -900,12 +902,54 @@ export async function POST(request: Request) {
     console.log("[AI Analyst] Question:", isReport ? "[Report]" : message);
     console.log("[AI Analyst] Posts loaded:", allPosts.length, "| Connections:", Object.keys(connections).length);
 
-    const geminiApiKey = process.env.GEMINI_API_KEY;
+    const geminiApiKey = request.headers.get("x-gemini-api-key") || process.env.GEMINI_API_KEY;
 
     if (geminiApiKey) {
       try {
-        const systemPrompt = `You are the UES AI Growth Analyst, a precise analytics assistant.
-Analyze the user's real-time cross-platform social media data below and answer their question accurately and deeply.
+        // Sort and optimize post catalog to prevent token quota exhaustion (429 rate limit issues)
+        const sortedByScore = [...allPosts].sort((a, b) => (b.uesScore || 0) - (a.uesScore || 0));
+        const topPerformed = sortedByScore.slice(0, 8);
+        const lowPerformed = sortedByScore.slice(-8).reverse();
+        const latestPosts = [...allPosts]
+          .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+          .slice(0, 10);
+
+        const optimizedCatalog = {
+          topPerforming: topPerformed.map(p => ({
+            title: p.title, platform: p.platform, type: p.type, uesScore: p.uesScore,
+            metrics: { likes: p.metrics?.likes, comments: p.metrics?.comments, views: p.metrics?.views }
+          })),
+          worstPerforming: lowPerformed.map(p => ({
+            title: p.title, platform: p.platform, type: p.type, uesScore: p.uesScore,
+            metrics: { likes: p.metrics?.likes, comments: p.metrics?.comments, views: p.metrics?.views }
+          })),
+          latestContent: latestPosts.map(p => ({
+            title: p.title, platform: p.platform, type: p.type, uesScore: p.uesScore, publishedAt: p.publishedAt
+          }))
+        };
+
+        const systemPrompt = `You are a real-time AI analytics assistant (UES AI Growth Analyst). Use the Gemini API's available web/search capabilities (Google Search grounding) whenever the user asks for current, latest, trending, recent, or real-time information.
+
+If the user asks questions such as:
+* "What is the current content trend?"
+* "What is trending right now?"
+* "What type of content is performing well currently?"
+* "What should I post today?"
+* "What are the latest Instagram/YouTube/X/Facebook trends?"
+
+Do NOT answer from old training knowledge or guess. Retrieve current information from reliable sources first, then provide a concise answer based on the latest available data.
+
+For social media growth questions, combine:
+1. The user's actual synced analytics data (from the JSON below).
+2. Current real-time/trending information from web/search sources.
+3. The user's platform, content type, audience, and recent performance.
+
+Always understand spelling mistakes, typos, slang, abbreviations, and poorly written questions. Infer the user's intended meaning and answer that question.
+Never fabricate real-time data, trends, statistics, or sources. If live/search data is unavailable, explicitly say that live data could not be verified instead of pretending it is current.
+For every growth recommendation, explain WHY it is recommended and give specific actions the user can take.
+The AI must provide personalized, current, data-backed answers—not generic responses.
+
+${isReport ? "Generate a comprehensive executive performance report with grades, platform deep dives, strengths, weaknesses, and growth action items." : ""}
 
 USER DATA (JSON):
 ${JSON.stringify({
@@ -918,19 +962,8 @@ ${JSON.stringify({
     return acc;
   }, {} as any),
   historicalTrend: calculateHistoricalTimeline(allPosts),
-  postCatalog: allPosts.map(p => ({
-    title: p.title, platform: p.platform, type: p.type, publishedAt: p.publishedAt, uesScore: p.uesScore,
-    metrics: { likes: p.metrics?.likes, comments: p.metrics?.comments, shares: p.metrics?.shares, views: p.metrics?.views, saves: p.metrics?.saves }
-  }))
+  postCatalog: optimizedCatalog
 }, null, 2)}
-
-RULES:
-1. Always use exact numbers from the JSON above. Never invent or guess data.
-2. If data is missing or zero, say it's unavailable — do not substitute placeholder numbers.
-3. For unrelated questions (not social media), politely decline.
-4. Understand spelling mistakes and typos in the user's question.
-5. Always give specific, actionable recommendations based on the actual data.
-${isReport ? "Generate a comprehensive executive performance report with grades, platform deep dives, strengths, weaknesses, and growth action items." : ""}
 
 Format all responses in clear Markdown with headings, bullet points, and bold text.`;
 
@@ -942,18 +975,46 @@ Format all responses in clear Markdown with headings, bullet points, and bold te
         }
         contents.push({ role: "user", parts: [{ text: isReport ? "Generate my executive performance report." : message }] });
 
-        const apiResponse = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
+        let apiResponse = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${geminiApiKey}`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               contents,
               systemInstruction: { parts: [{ text: systemPrompt }] },
-              generationConfig: { temperature: 0.65, topP: 0.95, maxOutputTokens: 2048 }
+              generationConfig: { temperature: 0.65, topP: 0.95, maxOutputTokens: 2048 },
+              tools: [{ googleSearch: {} }] // Enable live Google Search grounding
             })
           }
         );
+
+        // If the first call failed (e.g., due to Google Search Grounding tool quota limits on Free/unbilled accounts)
+        if (!apiResponse.ok) {
+          const errText = await apiResponse.text();
+          console.warn("[AI Analyst] Gemini call failed with status:", apiResponse.status, errText);
+          if (errText.includes("quota") || errText.includes("429") || errText.includes("RESOURCE_EXHAUSTED") || errText.includes("googleSearch") || errText.includes("tool")) {
+            console.log("[AI Analyst] Retrying Gemini call WITHOUT Google Search grounding tools...");
+            const fallbackSystemPrompt = systemPrompt
+              .replace("Use the Gemini API's available web/search capabilities (Google Search grounding) whenever the user asks for current, latest, trending, recent, or real-time information.", "Do NOT attempt to use any Google Search grounding tools or function calls, as they are not available for this key. Fulfill the user's request using your general knowledge directly.")
+              .replace("Do NOT answer from old training knowledge or guess. Retrieve current information from reliable sources first, then provide a concise answer based on the latest available data.", "Provide the best available information from your training data, combined with the user's analytics stats.");
+
+            apiResponse = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${geminiApiKey}`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  contents,
+                  systemInstruction: { parts: [{ text: fallbackSystemPrompt }] },
+                  generationConfig: { temperature: 0.65, topP: 0.95, maxOutputTokens: 2048 }
+                })
+              }
+            );
+          } else {
+            throw new Error(`Gemini API error: ${apiResponse.statusText} - ${errText}`);
+          }
+        }
 
         if (!apiResponse.ok) {
           const errText = await apiResponse.text();
@@ -962,10 +1023,13 @@ Format all responses in clear Markdown with headings, bullet points, and bold te
         }
 
         const data = await apiResponse.json();
+        console.log("[AI Analyst] Gemini raw response:", JSON.stringify(data));
         const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
         if (responseText) {
           console.log("[AI Analyst] Gemini responded successfully.");
           return NextResponse.json({ response: responseText });
+        } else {
+          console.warn("[AI Analyst] Gemini responded but responseText was empty or blocked. Candidates:", JSON.stringify(data.candidates));
         }
       } catch (err) {
         console.error("Gemini failed, falling back to local engine:", err);

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardTitle, CardSubtitle } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
@@ -62,6 +62,54 @@ export default function AddPostPage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // AI Co-Pilot State
+  const [copilotTopic, setCopilotTopic] = useState("");
+  const [copilotTab, setCopilotTab] = useState<"ideas" | "hooks" | "optimize">("ideas");
+  const [copilotLoading, setCopilotLoading] = useState(false);
+  const [copilotResults, setCopilotResults] = useState<any>(null);
+  const [copilotError, setCopilotError] = useState<string | null>(null);
+  const [geminiKey, setGeminiKey] = useState("");
+
+  // Load Gemini key on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedKey = localStorage.getItem("ues_gemini_api_key");
+      if (savedKey) setGeminiKey(savedKey);
+    }
+  }, []);
+
+  async function handleGenerateSuggestions(mode: "ideas" | "hooks" | "optimize") {
+    setCopilotLoading(true);
+    setCopilotError(null);
+    setCopilotResults(null);
+
+    try {
+      const res = await fetch("/api/ai/suggest", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(geminiKey ? { "x-gemini-api-key": geminiKey } : {}),
+        },
+        body: JSON.stringify({
+          platform,
+          type,
+          currentTitle: title,
+          currentDescription: description,
+          topic: copilotTopic,
+          mode,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Failed to generate suggestions.");
+      const data = await res.json();
+      setCopilotResults(data);
+    } catch (err: any) {
+      setCopilotError(err.message || "An error occurred");
+    } finally {
+      setCopilotLoading(false);
+    }
+  }
 
   const isYouTube = platform === "youtube";
   const supportsMedia = platform === "facebook" || platform === "instagram";
@@ -642,6 +690,250 @@ export default function AddPostPage() {
 
         {/* Sidebar */}
         <div className="space-y-5">
+          {/* AI Content Co-Pilot Card */}
+          <Card className="border border-cyan-border/30 bg-teal-surface/20 shadow-md overflow-hidden p-5">
+            <div className="flex items-center justify-between border-b border-cyan-border/10 pb-3 mb-4">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">✨</span>
+                <div>
+                  <h3 className="font-display font-bold text-sm text-mint">AI Content Co-Pilot</h3>
+                  <p className="text-[10px] text-mint-700">Real-time creator ideas & hook booster</p>
+                </div>
+              </div>
+              <span className={`w-2 h-2 rounded-full ${geminiKey ? "bg-cyan-ues animate-pulse" : "bg-amber-500"}`} title={geminiKey ? "Gemini Key Active" : "Local Fallback Active"} />
+            </div>
+
+            {/* Tabs */}
+            <div className="grid grid-cols-3 gap-1 bg-teal-dark/40 p-1 rounded-xl mb-4 text-center">
+              {(["ideas", "hooks", "optimize"] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => {
+                    setCopilotTab(tab);
+                    setCopilotResults(null);
+                    setCopilotError(null);
+                  }}
+                  className={`py-1.5 rounded-lg text-[10px] font-semibold tracking-wide transition-all uppercase ${
+                    copilotTab === tab
+                      ? "bg-cyan-mid text-cyan-ues shadow-sm"
+                      : "text-mint-700 hover:text-mint"
+                  }`}
+                >
+                  {tab === "ideas" ? "Ideas" : tab === "hooks" ? "Hooks" : "Optimize"}
+                </button>
+              ))}
+            </div>
+
+            {/* Tab Panels */}
+            {copilotTab === "ideas" && (
+              <div className="space-y-3.5">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-mint-700">Topic or Keywords</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="e.g. coding tips, fitness..."
+                      value={copilotTopic}
+                      onChange={(e) => setCopilotTopic(e.target.value)}
+                      className="flex-1 bg-[#0b191c]/80 border border-cyan-border/20 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-cyan-ues text-mint placeholder:text-mint-700/40"
+                    />
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      disabled={copilotLoading}
+                      onClick={() => handleGenerateSuggestions("ideas")}
+                      className="px-3 text-xs"
+                    >
+                      {copilotLoading ? "..." : "Go"}
+                    </Button>
+                  </div>
+                </div>
+
+                {copilotResults?.ideas && (
+                  <div className="space-y-3 pt-2 max-h-[300px] overflow-y-auto pr-1 scrollbar-thin">
+                    {copilotResults.ideas.map((idea: any, idx: number) => (
+                      <div key={idx} className="p-3 rounded-xl border border-cyan-border/10 bg-teal-card/30 space-y-2">
+                        <div className="flex justify-between items-start gap-1">
+                          <h4 className="text-xs font-bold text-mint leading-snug">{idea.title}</h4>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTitle(idea.title);
+                              if (idea.description) setDescription(idea.description);
+                              if (idea.tags && isYouTube) setTags(idea.tags.join(", "));
+                            }}
+                            className="text-[9px] text-cyan-ues hover:underline flex-shrink-0 font-medium"
+                          >
+                            Apply Draft
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-[#F7FFF7]/80 leading-relaxed italic border-l border-cyan-ues/40 pl-2">
+                          Hook: {idea.hook}
+                        </p>
+                        {idea.tags && (
+                          <div className="flex flex-wrap gap-1.5 pt-1">
+                            {idea.tags.map((tg: string, i: number) => (
+                              <span key={i} className="text-[8px] px-1.5 py-0.5 rounded bg-[#4ECDC4]/5 text-cyan-ues/90 border border-cyan-border/10">
+                                #{tg}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {copilotTab === "hooks" && (
+              <div className="space-y-3.5">
+                <p className="text-[10px] text-mint-700 leading-normal">
+                  Generates scroll-stopping hooks and alternative titles based on your current Title and Description.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-xs border-cyan-border/25 text-mint"
+                  disabled={copilotLoading || !title.trim()}
+                  onClick={() => handleGenerateSuggestions("hooks")}
+                >
+                  {copilotLoading ? "Generating Hook Variants..." : "⚡ Generate Hooks"}
+                </Button>
+
+                {copilotResults?.hooks && (
+                  <div className="space-y-2.5 pt-2 max-h-[300px] overflow-y-auto pr-1 scrollbar-thin">
+                    {copilotResults.hooks.map((hook: any, idx: number) => (
+                      <div key={idx} className="p-3 rounded-xl border border-cyan-border/10 bg-teal-card/30 space-y-1.5">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[8px] font-bold text-cyan-ues uppercase tracking-wider">{hook.type}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const separator = description ? "\n\n" : "";
+                              setDescription(`"${hook.text}"${separator}${description}`);
+                            }}
+                            className="text-[9px] text-cyan-ues hover:underline font-medium"
+                          >
+                            Add to Body
+                          </button>
+                        </div>
+                        <p className="text-xs text-[#F7FFF7]/90 leading-relaxed font-medium">"{hook.text}"</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {copilotTab === "optimize" && (
+              <div className="space-y-3.5">
+                <p className="text-[10px] text-mint-700 leading-normal">
+                  Improves search tags, structures descriptions, and generates engaging Calls to Action (CTAs).
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-xs border-cyan-border/25 text-mint"
+                  disabled={copilotLoading || !title.trim()}
+                  onClick={() => handleGenerateSuggestions("optimize")}
+                >
+                  {copilotLoading ? "Analyzing & Optimizing..." : "📈 Optimize Draft"}
+                </Button>
+
+                {copilotResults && (
+                  <div className="space-y-3 pt-2 max-h-[350px] overflow-y-auto pr-1 scrollbar-thin text-[11px] text-[#F7FFF7]/90">
+                    {copilotResults.optimizedTitle && (
+                      <div className="p-3 rounded-xl border border-cyan-border/10 bg-teal-card/30 space-y-1">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[8px] font-bold text-cyan-ues uppercase">Optimized Title</span>
+                          <button
+                            type="button"
+                            onClick={() => setTitle(copilotResults.optimizedTitle)}
+                            className="text-[9px] text-cyan-ues hover:underline font-medium"
+                          >
+                            Apply Title
+                          </button>
+                        </div>
+                        <p className="font-semibold text-mint">{copilotResults.optimizedTitle}</p>
+                      </div>
+                    )}
+
+                    {copilotResults.optimizedDescription && (
+                      <div className="p-3 rounded-xl border border-cyan-border/10 bg-teal-card/30 space-y-1">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[8px] font-bold text-cyan-ues uppercase">Formatted Body</span>
+                          <button
+                            type="button"
+                            onClick={() => setDescription(copilotResults.optimizedDescription)}
+                            className="text-[9px] text-cyan-ues hover:underline font-medium"
+                          >
+                            Replace Body
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-mint-700 line-clamp-3">{copilotResults.optimizedDescription}</p>
+                      </div>
+                    )}
+
+                    {copilotResults.cta && (
+                      <div className="p-3 rounded-xl border border-cyan-border/10 bg-teal-card/30 space-y-1">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[8px] font-bold text-cyan-ues uppercase">Call to Action (CTA)</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const separator = description ? "\n\n" : "";
+                              setDescription(`${description}${separator}${copilotResults.cta}`);
+                            }}
+                            className="text-[9px] text-cyan-ues hover:underline font-medium"
+                          >
+                            Append CTA
+                          </button>
+                        </div>
+                        <p className="text-xs italic">"{copilotResults.cta}"</p>
+                      </div>
+                    )}
+
+                    {copilotResults.suggestedTags && (
+                      <div className="p-3 rounded-xl border border-cyan-border/10 bg-teal-card/30 space-y-1.5">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[8px] font-bold text-cyan-ues uppercase">SEO Keywords</span>
+                          {isYouTube && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newTags = tags ? `${tags}, ${copilotResults.suggestedTags.join(", ")}` : copilotResults.suggestedTags.join(", ");
+                                setTags(newTags);
+                              }}
+                              className="text-[9px] text-cyan-ues hover:underline font-medium"
+                            >
+                              Add to Tags
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {copilotResults.suggestedTags.map((tg: string, i: number) => (
+                            <span key={i} className="text-[9px] text-mint-700">#{tg}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {copilotError && (
+              <div className="mt-3 p-2.5 rounded-xl bg-pink-light border border-pink-ues/15 text-[10px] text-pink-ues leading-relaxed">
+                ⚠️ {copilotError}
+              </div>
+            )}
+          </Card>
+
           {/* Platform Info Card */}
           <Card>
             <CardTitle>{platformDisplay} Publishing</CardTitle>
