@@ -191,14 +191,20 @@ export class AnalyticsService {
       }
     });
 
-    // Overview total reach: Instagram Reach + Facebook Reach
-    totalReach = platformStats.instagram.reach + platformStats.facebook.reach;
+    // Helper helpers to fallback to views if reach/impressions is 0
+    const getReachVal = (stats: any) => stats.reach > 0 ? stats.reach : stats.views;
+    const getImpressionsVal = (stats: any) => stats.impressions > 0 ? stats.impressions : stats.views;
+
+    // Overview total reach/views: all platforms combined
+    // YouTube uses "views", Meta platforms use "reach" — combine all for a true total content exposure figure
+    totalReach = getReachVal(platformStats.instagram) + getReachVal(platformStats.facebook) + platformStats.youtube.views;
     
-    // Overview total impressions: Instagram Impressions + Facebook Impressions
-    totalImpressions = platformStats.instagram.impressions + platformStats.facebook.impressions;
+    // Overview total impressions: all platform impressions
+    totalImpressions = getImpressionsVal(platformStats.instagram) + getImpressionsVal(platformStats.facebook) + getImpressionsVal(platformStats.youtube);
+
 
     // Overall Engagement Rate denominator: Reach for Meta platforms, Views for YouTube
-    overallDenominator = platformStats.instagram.reach + platformStats.facebook.reach + platformStats.youtube.views;
+    overallDenominator = getReachVal(platformStats.instagram) + getReachVal(platformStats.facebook) + platformStats.youtube.views;
     const engagementRate = overallDenominator > 0 ? ((totalEngagement / overallDenominator) * 100).toFixed(2) : "N/A";
 
     const totalPosts = Object.values(platformStats).reduce((acc: number, p: any) => acc + p.postsCount, 0);
@@ -305,9 +311,9 @@ export class AnalyticsService {
           reach = cur.views;
           engDenominator = cur.views;
         } else {
-          reach = cur.reach;
-          impressions = cur.impressions;
-          engDenominator = cur.reach;
+          reach = cur.reach > 0 ? cur.reach : cur.views;
+          impressions = cur.impressions > 0 ? cur.impressions : cur.views;
+          engDenominator = cur.reach > 0 ? cur.reach : (cur.views > 0 ? cur.views : 1000);
         }
       }
 

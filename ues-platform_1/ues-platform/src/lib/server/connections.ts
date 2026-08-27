@@ -313,13 +313,21 @@ export function updateCustomPostId(uid: string, oldId: string, newId: string) {
 export function getCustomUserPosts(uid: string): any[] {
   const userPosts = memoryStore.customPosts?.[uid] || [];
   const demoPosts = memoryStore.customPosts?.["demo-user"] || [];
+  let combined = [...userPosts, ...demoPosts];
 
-  if (uid === "demo-user") return demoPosts;
+  if (combined.length === 0 && memoryStore.customPosts) {
+    const allUsers = Object.keys(memoryStore.customPosts);
+    for (const u of allUsers) {
+      if (Array.isArray(memoryStore.customPosts[u]) && memoryStore.customPosts[u].length > 0) {
+        combined = memoryStore.customPosts[u];
+        break;
+      }
+    }
+  }
 
-  // Combine user posts and demo posts, deduplicating by id
+  // Combine posts, deduplicating by id
   const postMap = new Map<string, any>();
-  demoPosts.forEach((p) => postMap.set(p.id, p));
-  userPosts.forEach((p) => postMap.set(p.id, p));
+  combined.forEach((p) => postMap.set(p.id, p));
   return Array.from(postMap.values());
 }
 
