@@ -11,15 +11,15 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantStyles: Record<Variant, string> = {
   primary:
-    "bg-cyan-ues text-teal-dark hover:bg-[#5de0d7] hover:-translate-y-px shadow-cyan-glow/0 hover:shadow-cyan-glow",
+    "bg-cyan-ues text-teal-dark hover:bg-[#5de0d7] hover:scale-[1.02] hover:-translate-y-0.5 active:scale-[0.98] shadow-cyan-glow/0 hover:shadow-cyan-glow",
   pink:
-    "bg-pink-ues text-white hover:bg-[#ff8080] hover:-translate-y-px shadow-pink-glow/0 hover:shadow-pink-glow",
+    "bg-pink-ues text-white hover:bg-[#ff8080] hover:scale-[1.02] hover:-translate-y-0.5 active:scale-[0.98] shadow-pink-glow/0 hover:shadow-pink-glow",
   outline:
-    "bg-transparent border border-cyan-border text-cyan-ues hover:border-cyan-ues hover:bg-cyan-light",
+    "bg-transparent border border-cyan-border text-cyan-ues hover:border-cyan-ues hover:bg-cyan-light hover:scale-[1.02] hover:-translate-y-0.5 active:scale-[0.98]",
   ghost:
-    "bg-mint-50 border border-mint-100 text-[var(--color-mint)] hover:bg-mint-100",
+    "bg-mint-50 border border-mint-100 text-[var(--color-mint)] hover:bg-mint-100 hover:scale-[1.02] hover:-translate-y-0.5 active:scale-[0.98]",
   danger:
-    "bg-transparent text-pink-ues/70 hover:bg-pink-light hover:text-pink-ues",
+    "bg-transparent text-pink-ues/70 hover:bg-pink-light hover:text-pink-ues hover:scale-[1.02] hover:-translate-y-0.5 active:scale-[0.98]",
 };
 
 const sizeStyles: Record<Size, string> = {
@@ -35,7 +35,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         className={cn(
           "inline-flex items-center justify-center font-display font-semibold",
-          "transition-all duration-200 cursor-pointer select-none",
+          "transition-all duration-300 ease-out cursor-pointer select-none",
           "disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none",
           variantStyles[variant],
           sizeStyles[size],

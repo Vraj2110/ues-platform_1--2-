@@ -2,20 +2,38 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { auth } from "@/lib/firebase";
 
 export default function RootPage() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((u) => {
       setUser(u);
       setLoading(false);
+      if (u) {
+        router.replace("/dashboard");
+      }
     });
     return () => unsubscribe();
-  }, []);
+  }, [router]);
+
+  if (loading || user) {
+    return (
+      <main className="flex flex-col items-center justify-center min-h-screen bg-[#0b1319] text-[#e0f2fe]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-4 border-cyan-ues border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm font-medium tracking-wide text-cyan-ues animate-pulse">
+            Checking authentication...
+          </p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="flex flex-col items-center justify-center min-h-screen bg-[#0b1319] text-[#e0f2fe] p-6 text-center">

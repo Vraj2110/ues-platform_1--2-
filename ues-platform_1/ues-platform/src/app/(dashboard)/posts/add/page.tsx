@@ -7,7 +7,35 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardTitle, CardSubtitle } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import {
+  ArrowLeft,
+  Video,
+  Image as ImageIcon,
+  Settings,
+  UploadCloud,
+} from "lucide-react";
 import { auth } from "@/lib/firebase";
+
+// Custom SVG Icons for brand logos not included in this Lucide bundle
+const YoutubeIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" {...props}>
+    <path d="M23.498 6.163a3.003 3.003 0 0 0-2.11-2.11C19.518 3.545 12 3.545 12 3.545s-7.518 0-9.388.508a3.003 3.003 0 0 0-2.11 2.11C0 8.033 0 12 0 12s0 3.967.502 5.837a3.003 3.003 0 0 0 2.11 2.11c1.87.508 9.388.508 9.388.508s7.518 0 9.388-.508a3.003 3.003 0 0 0 2.11-2.11C24 15.967 24 12 24 12s0-3.967-.502-5.837zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+  </svg>
+);
+
+const InstagramIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+    <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+  </svg>
+);
+
+const FacebookIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" {...props}>
+    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+  </svg>
+);
 
 const PLATFORM_OPTIONS = [
   { value: "youtube", label: "YouTube ▶️", description: "Upload videos directly to YouTube" },
@@ -36,6 +64,50 @@ const CHAR_LIMITS: Record<string, number> = {
   facebook: 63206,
   instagram: 2200,
   youtube: 5000,
+};
+
+const PLATFORM_DETAILS: Record<string, {
+  icon: React.ReactNode;
+  activeClass: string;
+  hoverClass: string;
+  badgeClass: string;
+  themeColor: string;
+}> = {
+  youtube: {
+    icon: <YoutubeIcon className="w-5 h-5 text-red-500 shadow-sm" />,
+    activeClass: "border-red-500 bg-red-500/5 shadow-[0_0_15px_rgba(239,68,68,0.15)]",
+    hoverClass: "hover:border-red-500/30 hover:bg-red-500/5",
+    badgeClass: "bg-red-500/10 text-red-400 border-red-500/20",
+    themeColor: "from-red-500 to-red-600",
+  },
+  instagram: {
+    icon: <InstagramIcon className="w-5 h-5 text-pink-500 shadow-sm" />,
+    activeClass: "border-pink-500 bg-pink-500/5 shadow-[0_0_15px_rgba(236,72,153,0.15)]",
+    hoverClass: "hover:border-pink-500/30 hover:bg-pink-500/5",
+    badgeClass: "bg-pink-500/10 text-pink-400 border-pink-500/20",
+    themeColor: "from-pink-500 to-rose-500",
+  },
+  facebook: {
+    icon: <FacebookIcon className="w-5 h-5 text-blue-500 shadow-sm" />,
+    activeClass: "border-blue-500 bg-blue-500/5 shadow-[0_0_15px_rgba(59,130,246,0.15)]",
+    hoverClass: "hover:border-blue-500/30 hover:bg-blue-500/5",
+    badgeClass: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+    themeColor: "from-blue-500 to-blue-600",
+  },
+  threads: {
+    icon: <span className="text-xs font-bold text-white shadow-sm font-sans bg-neutral-800 border border-neutral-700 w-5 h-5 rounded-full flex items-center justify-center">@</span>,
+    activeClass: "border-white bg-white/5 shadow-[0_0_15px_rgba(255,255,255,0.1)]",
+    hoverClass: "hover:border-white/30 hover:bg-white/5",
+    badgeClass: "bg-white/10 text-white border-white/20",
+    themeColor: "from-neutral-600 to-neutral-800",
+  },
+};
+
+const SUBMIT_THEMES: Record<string, string> = {
+  youtube: "bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white hover:shadow-[0_0_25px_rgba(239,68,68,0.35)] shadow-[0_4px_15px_rgba(239,68,68,0.15)]",
+  instagram: "bg-gradient-to-r from-pink-600 via-rose-500 to-yellow-500 hover:from-pink-500 hover:to-rose-400 text-white hover:shadow-[0_0_25px_rgba(236,72,153,0.35)] shadow-[0_4px_15px_rgba(236,72,153,0.15)]",
+  facebook: "bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white hover:shadow-[0_0_25px_rgba(59,130,246,0.35)] shadow-[0_4px_15px_rgba(59,130,246,0.15)]",
+  threads: "bg-gradient-to-r from-neutral-700 to-neutral-800 hover:from-neutral-600 hover:to-neutral-700 text-white hover:shadow-[0_0_25px_rgba(255,255,255,0.15)] shadow-[0_4px_15px_rgba(255,255,255,0.05)]",
 };
 
 export default function AddPostPage() {
@@ -70,6 +142,7 @@ export default function AddPostPage() {
   const [copilotResults, setCopilotResults] = useState<any>(null);
   const [copilotError, setCopilotError] = useState<string | null>(null);
   const [geminiKey, setGeminiKey] = useState("");
+  const [hasServerKey, setHasServerKey] = useState(false);
 
   // Load Gemini key on mount
   useEffect(() => {
@@ -77,6 +150,13 @@ export default function AddPostPage() {
       const savedKey = localStorage.getItem("ues_gemini_api_key");
       if (savedKey) setGeminiKey(savedKey);
     }
+    // Fetch server Gemini key configuration status
+    fetch("/api/ai/status")
+      .then(res => res.json())
+      .then(data => {
+        if (data.hasServerKey) setHasServerKey(true);
+      })
+      .catch(err => console.error("Failed to fetch server AI status", err));
   }, []);
 
   async function handleGenerateSuggestions(mode: "ideas" | "hooks" | "optimize") {
@@ -424,78 +504,100 @@ export default function AddPostPage() {
         subtitle={`Create and publish content directly to ${platformDisplay}`}
         action={
           <Link href="/posts">
-            <Button variant="ghost">← Back to Posts</Button>
+            <Button variant="ghost">
+              <ArrowLeft className="w-4 h-4 mr-1.5" /> Back to Posts
+            </Button>
           </Link>
         }
       />
 
-      <div className="px-9 pb-9 grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-6">
+      <div className="px-9 pb-9 grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-6 relative overflow-hidden">
+        {/* Ambient background glows */}
+        <div className="absolute top-10 left-10 w-72 h-72 bg-[#4ECDC4]/5 rounded-full blur-[100px] pointer-events-none" />
+        <div className="absolute bottom-20 right-80 w-80 h-80 bg-[#ff6b6b]/5 rounded-full blur-[120px] pointer-events-none" />
+
         {/* Main form */}
-        <Card>
-          <div className="flex items-center justify-between">
+        <Card className="relative overflow-hidden backdrop-blur-md bg-teal-card/80 border border-cyan-border/[0.15] shadow-2xl">
+          <div className="flex items-center justify-between border-b border-cyan-border/10 pb-4">
             <div>
-              <CardTitle>
+              <CardTitle className="text-lg font-bold tracking-tight bg-gradient-to-r from-mint via-mint/90 to-cyan-ues bg-clip-text text-transparent">
                 {isYouTube ? "Upload & Publish YouTube Video" : `Publish to ${platformDisplay}`}
               </CardTitle>
-              <CardSubtitle>
+              <CardSubtitle className="text-xs text-mint-700 mt-1">
                 {isYouTube
                   ? "Select a video file, configure publishing details, and post directly to YouTube"
                   : `Write your content and publish it directly to ${platformDisplay}`}
               </CardSubtitle>
             </div>
-            <span className="px-3 py-1 text-xs font-semibold rounded-full bg-[#4ECDC4]/10 text-cyan-ues border border-cyan-border/20">
-              {PLATFORM_OPTIONS.find(p => p.value === platform)?.label || platform}
-            </span>
+            {(() => {
+              const details = PLATFORM_DETAILS[platform] || { badgeClass: "bg-cyan-light/10 text-cyan-ues border-cyan-border/20" };
+              return (
+                <span className={`px-3.5 py-1.5 text-[10px] font-bold rounded-full border transition-all duration-300 ${details.badgeClass} uppercase tracking-wider shadow-sm`}>
+                  {PLATFORM_OPTIONS.find(p => p.value === platform)?.label || platform}
+                </span>
+              );
+            })()}
           </div>
 
           {error && (
-            <div className="mt-4 p-3.5 rounded-xl bg-pink-light border border-pink-ues/20 text-xs text-pink-ues">
+            <div className="mt-4 p-3.5 rounded-xl bg-pink-light/30 border border-pink-ues/20 text-xs text-pink-ues font-medium backdrop-blur-sm">
               {error}
             </div>
           )}
 
           {successMessage && (
-            <div className="mt-4 p-3.5 rounded-xl bg-cyan-light border border-cyan-border/20 text-xs text-cyan-ues font-semibold">
+            <div className="mt-4 p-3.5 rounded-xl bg-cyan-light/20 border border-cyan-border/20 text-xs text-cyan-ues font-semibold backdrop-blur-sm">
               ✓ {successMessage}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="mt-6 space-y-5">
+          <form onSubmit={handleSubmit} className="mt-6 space-y-6">
             {/* Platform selector */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-mint-700">Platform</label>
+            <div className="flex flex-col gap-2">
+              <label className="text-[10px] font-bold text-mint-700 uppercase tracking-wider">Select Platform</label>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                {PLATFORM_OPTIONS.map((o) => (
-                  <button
-                    key={o.value}
-                    type="button"
-                    onClick={() => {
-                      setPlatform(o.value);
-                      setError(null);
-                      setSuccessMessage(null);
-                      setVideoFile(null);
-                      setThumbnailFile(null);
-                      setVideoPreviewUrl(null);
-                      setThumbnailPreviewUrl(null);
-                    }}
-                    className={`p-3 rounded-xl text-left transition-all duration-200 border ${
-                      platform === o.value
-                        ? "border-cyan-ues/50 bg-cyan-light/[0.06] shadow-sm"
-                        : "border-cyan-border/10 bg-teal-card/30 hover:bg-teal-card/50"
-                    }`}
-                  >
-                    <div className="text-sm font-semibold text-[var(--color-mint)]">{o.label}</div>
-                    <div className="text-[10px] text-mint-700 mt-0.5">{o.description}</div>
-                  </button>
-                ))}
+                {PLATFORM_OPTIONS.map((o) => {
+                  const details = PLATFORM_DETAILS[o.value] || {
+                    icon: "✨",
+                    activeClass: "border-cyan-ues bg-cyan-light/[0.06]",
+                    hoverClass: "hover:bg-teal-card/50",
+                  };
+                  const isActive = platform === o.value;
+                  return (
+                    <button
+                      key={o.value}
+                      type="button"
+                      onClick={() => {
+                        setPlatform(o.value);
+                        setError(null);
+                        setSuccessMessage(null);
+                        setVideoFile(null);
+                        setThumbnailFile(null);
+                        setVideoPreviewUrl(null);
+                        setThumbnailPreviewUrl(null);
+                      }}
+                      className={`p-4 rounded-2xl text-left transition-all duration-300 border flex flex-col justify-between h-[96px] ${
+                        isActive
+                          ? `${details.activeClass} scale-[1.02]`
+                          : `border-cyan-border/10 bg-teal-card/20 ${details.hoverClass} hover:scale-[1.01]`
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">{details.icon}</span>
+                        <div className="text-xs font-bold text-[var(--color-mint)]">{o.label.split(" ")[0]}</div>
+                      </div>
+                      <div className="text-[9px] text-mint-700 leading-snug line-clamp-2">{o.description}</div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
             {/* YouTube: Video Format Type */}
             {isYouTube && (
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-mint-700">Video Format / Type</label>
-                <select value={type} onChange={(e) => setType(e.target.value)} className="ues-select">
+                <label className="text-[10px] font-bold text-mint-700 uppercase tracking-wider">Video Format / Type</label>
+                <select value={type} onChange={(e) => setType(e.target.value)} className="ues-select bg-teal-surface/30 backdrop-blur-sm border-cyan-border/20 focus:border-cyan-ues focus:shadow-[0_0_15px_rgba(78,205,196,0.15)] rounded-2xl transition duration-300">
                   <option value="video">Long-form Video (Standard)</option>
                   <option value="short">YouTube Short / Short Video</option>
                 </select>
@@ -505,37 +607,37 @@ export default function AddPostPage() {
             {/* Video File Upload (YouTube or Facebook/Threads) */}
             {(isYouTube || supportsMedia) && !thumbnailFile && (
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-mint-700">
+                <label className="text-[10px] font-bold text-mint-700 uppercase tracking-wider">
                   {isYouTube ? "Upload Video File *" : "Upload Video (Optional)"}
                 </label>
                 <input ref={fileInputRef} type="file" accept="video/*" onChange={handleVideoChange} className="hidden" />
                 <div
                   onClick={() => fileInputRef.current?.click()}
-                  className={`relative flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-2xl cursor-pointer transition-all duration-200 ${
+                  className={`relative flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-2xl cursor-pointer transition-all duration-300 backdrop-blur-sm group ${
                     videoFile
-                      ? "border-cyan-ues/50 bg-cyan-light/[0.04]"
-                      : "border-cyan-border/25 hover:border-cyan-ues/40 bg-teal-surface/50 hover:bg-teal-surface"
+                      ? "border-cyan-ues bg-cyan-light/[0.04] shadow-[0_0_20px_rgba(78,205,196,0.05)]"
+                      : "border-cyan-border/20 hover:border-cyan-ues/50 bg-teal-surface/20 hover:bg-teal-surface/40 shadow-inner"
                   }`}
                 >
                   {videoFile ? (
-                    <div className="w-full flex flex-col items-center gap-3">
+                    <div className="w-full flex flex-col items-center gap-4">
                       {videoPreviewUrl && (
                         <video src={videoPreviewUrl} controls className="max-h-48 rounded-xl border border-cyan-border/20 shadow-md" />
                       )}
                       <div className="text-center">
                         <p className="text-sm font-semibold text-cyan-ues">{videoFile.name}</p>
-                        <p className="text-xs text-mint-700 mt-0.5">{formatBytes(videoFile.size)} • Ready for upload</p>
+                        <p className="text-xs text-mint-700 mt-1">{formatBytes(videoFile.size)} • Ready for upload</p>
                       </div>
-                      <Button type="button" variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setVideoFile(null); setVideoPreviewUrl(null); }}>
+                      <Button type="button" variant="danger" size="sm" onClick={(e) => { e.stopPropagation(); setVideoFile(null); setVideoPreviewUrl(null); }} className="px-4 py-1.5 text-xs">
                         Remove Video
                       </Button>
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center gap-2 text-center py-4">
-                      <div className="w-12 h-12 rounded-full bg-cyan-mid/20 flex items-center justify-center text-2xl text-cyan-ues">📹</div>
+                    <div className="flex flex-col items-center gap-3 text-center py-4">
+                      <div className="w-14 h-14 rounded-full bg-cyan-mid/20 flex items-center justify-center text-2xl text-cyan-ues group-hover:scale-110 group-hover:bg-cyan-ues/20 transition-all duration-300 shadow-[0_0_12px_rgba(78,205,196,0.15)]">📹</div>
                       <div>
                         <p className="text-sm font-semibold text-[var(--color-mint)]">Click to browse or drag & drop video file</p>
-                        <p className="text-xs text-mint-700 mt-1">MP4, MOV, MKV, or AVI</p>
+                        <p className="text-xs text-mint-700 mt-1.5">MP4, MOV, MKV, or AVI</p>
                       </div>
                     </div>
                   )}
@@ -546,27 +648,27 @@ export default function AddPostPage() {
             {/* Custom Image / Thumbnail */}
             {(isYouTube || supportsMedia) && !videoFile && (
               <div className="flex flex-col gap-1.5 pt-1">
-                <label className="text-xs font-medium text-mint-700">
+                <label className="text-[10px] font-bold text-mint-700 uppercase tracking-wider">
                   {isYouTube ? "Custom Thumbnail (Optional)" : "Upload Image (Optional)"}
                 </label>
                 <input ref={thumbnailInputRef} type="file" accept="image/*" onChange={handleThumbnailChange} className="hidden" />
                 <div
                   onClick={() => thumbnailInputRef.current?.click()}
-                  className="flex items-center gap-3 p-3 border border-cyan-border/20 rounded-xl bg-teal-card/40 cursor-pointer hover:bg-teal-card/70 transition"
+                  className="flex items-center gap-4 p-4 border border-cyan-border/10 rounded-2xl bg-teal-card/20 backdrop-blur-sm cursor-pointer hover:bg-teal-card/40 hover:border-cyan-ues/40 transition-all duration-300 shadow-sm"
                 >
                   {thumbnailPreviewUrl ? (
-                    <img src={thumbnailPreviewUrl} alt="Preview" className="w-16 h-10 object-cover rounded-md" />
+                    <img src={thumbnailPreviewUrl} alt="Preview" className="w-16 h-10 object-cover rounded-xl border border-cyan-border/20 shadow-md" />
                   ) : (
-                    <div className="w-10 h-10 rounded-lg bg-cyan-mid/20 flex items-center justify-center text-cyan-ues">🖼️</div>
+                    <div className="w-12 h-12 rounded-xl bg-cyan-mid/20 flex items-center justify-center text-2xl text-cyan-ues shadow-sm">🖼️</div>
                   )}
                   <div className="flex-1">
                     <p className="text-xs font-semibold text-[var(--color-mint)]">
                       {thumbnailFile ? thumbnailFile.name : (isYouTube ? "Select custom thumbnail image" : "Select an image to post")}
                     </p>
-                    <p className="text-[11px] text-mint-700">PNG or JPG</p>
+                    <p className="text-[10px] text-mint-700 mt-0.5">PNG or JPG</p>
                   </div>
                   {thumbnailFile && (
-                    <Button type="button" variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setThumbnailFile(null); setThumbnailPreviewUrl(null); }}>
+                    <Button type="button" variant="danger" size="sm" onClick={(e) => { e.stopPropagation(); setThumbnailFile(null); setThumbnailPreviewUrl(null); }} className="px-3.5 py-1.5 text-xs">
                       Remove
                     </Button>
                   )}
@@ -586,11 +688,12 @@ export default function AddPostPage() {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               required={isYouTube || (!videoFile && !thumbnailFile)}
+              className="bg-teal-surface/20 border-cyan-border/20 focus:border-cyan-ues focus:shadow-[0_0_15px_rgba(78,205,196,0.15)] rounded-2xl transition duration-300"
             />
 
             {/* Description / Body */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-mint-700">
+              <label className="text-[10px] font-bold text-mint-700 uppercase tracking-wider">
                 {isYouTube ? "Video Description" : "Additional Details (optional)"}
               </label>
               <textarea
@@ -602,11 +705,11 @@ export default function AddPostPage() {
                     : "Add more details or context to your post..."
                 }
                 rows={isYouTube ? 4 : 3}
-                className="ues-select font-sans text-sm resize-y"
+                className="ues-select font-sans text-sm resize-y bg-teal-surface/20 border-cyan-border/20 focus:border-cyan-ues focus:shadow-[0_0_15px_rgba(78,205,196,0.15)] rounded-2xl transition duration-300 min-h-[120px] px-4 py-3"
               />
               {/* Character counter for text platforms */}
               {isTextPlatform && (
-                <div className={`text-right text-[11px] font-mono ${isOverLimit ? "text-pink-ues font-semibold" : "text-mint-700"}`}>
+                <div className={`text-right text-[10px] font-mono ${isOverLimit ? "text-pink-ues font-semibold animate-pulse" : "text-mint-700"}`}>
                   {charCount} / {charLimit}
                 </div>
               )}
@@ -614,22 +717,22 @@ export default function AddPostPage() {
 
             {/* YouTube Specific Settings */}
             {isYouTube && (
-              <div className="p-4 rounded-2xl border border-cyan-border/20 bg-teal-surface/50 space-y-4">
-                <p className="text-xs font-bold text-cyan-ues uppercase tracking-wider">
-                  ⚙️ YouTube Publishing & Metadata Settings
+              <div className="p-5 rounded-2xl border border-cyan-border/10 bg-teal-surface/30 backdrop-blur-sm space-y-4 shadow-sm">
+                <p className="text-[10px] font-bold text-cyan-ues uppercase tracking-widest flex items-center gap-1.5">
+                  <span>⚙️</span> YouTube Publishing & Metadata Settings
                 </p>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium text-mint-700">Category</label>
-                    <select value={category} onChange={(e) => setCategory(e.target.value)} className="ues-select">
+                    <label className="text-[10px] font-bold text-mint-700 uppercase tracking-wider">Category</label>
+                    <select value={category} onChange={(e) => setCategory(e.target.value)} className="ues-select bg-teal-surface/30 border-cyan-border/25 focus:border-cyan-ues rounded-2xl transition duration-300">
                       {YOUTUBE_CATEGORIES.map((cat) => (
                         <option key={cat} value={cat}>{cat}</option>
                       ))}
                     </select>
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium text-mint-700">Privacy Status</label>
-                    <select value={privacyStatus} onChange={(e) => setPrivacyStatus(e.target.value)} className="ues-select">
+                    <label className="text-[10px] font-bold text-mint-700 uppercase tracking-wider">Privacy Status</label>
+                    <select value={privacyStatus} onChange={(e) => setPrivacyStatus(e.target.value)} className="ues-select bg-teal-surface/30 border-cyan-border/25 focus:border-cyan-ues rounded-2xl transition duration-300">
                       {YOUTUBE_PRIVACY.map((priv) => (
                         <option key={priv.value} value={priv.value}>{priv.label}</option>
                       ))}
@@ -642,6 +745,7 @@ export default function AddPostPage() {
                   type="text"
                   value={tags}
                   onChange={(e) => setTags(e.target.value)}
+                  className="bg-teal-surface/20 border-cyan-border/20 focus:border-cyan-ues focus:shadow-[0_0_15px_rgba(78,205,196,0.15)] rounded-2xl transition duration-300"
                 />
               </div>
             )}
@@ -653,6 +757,7 @@ export default function AddPostPage() {
                 type="date"
                 value={publishedAt}
                 onChange={(e) => setPublishedAt(e.target.value)}
+                className="bg-teal-surface/20 border-cyan-border/20 focus:border-cyan-ues focus:shadow-[0_0_15px_rgba(78,205,196,0.15)] rounded-2xl transition duration-300"
               />
             )}
 
@@ -663,7 +768,7 @@ export default function AddPostPage() {
                   <span>{uploadProgress < 80 ? "Uploading media to secure storage..." : `Publishing to ${platformDisplay}...`}</span>
                   <span className="font-semibold text-cyan-ues">{uploadProgress}%</span>
                 </div>
-                <div className="w-full h-2 bg-teal-card rounded-full overflow-hidden">
+                <div className="w-full h-2 bg-teal-card rounded-full overflow-hidden shadow-inner">
                   <div
                     className="h-full bg-cyan-ues transition-all duration-300 rounded-full"
                     style={{ width: `${uploadProgress}%` }}
@@ -676,7 +781,9 @@ export default function AddPostPage() {
               type="submit"
               variant="primary"
               size="lg"
-              className="w-full mt-3"
+              className={`w-full mt-4 font-bold text-sm tracking-wider py-4 rounded-2xl hover:scale-[1.01] transition-all duration-300 active:scale-[0.99] border-0 cursor-pointer ${
+                SUBMIT_THEMES[platform] || "bg-cyan-ues text-teal-dark hover:bg-[#5de0d7] hover:shadow-[0_0_20px_rgba(78,205,196,0.4)] shadow-[0_4px_15px_rgba(78,205,196,0.15)]"
+              }`}
               disabled={loading || (isTextPlatform && isOverLimit)}
             >
               {loading
@@ -700,7 +807,7 @@ export default function AddPostPage() {
                   <p className="text-[10px] text-mint-700">Real-time creator ideas & hook booster</p>
                 </div>
               </div>
-              <span className={`w-2 h-2 rounded-full ${geminiKey ? "bg-cyan-ues animate-pulse" : "bg-amber-500"}`} title={geminiKey ? "Gemini Key Active" : "Local Fallback Active"} />
+              <span className={`w-2 h-2 rounded-full ${(geminiKey || hasServerKey) ? "bg-cyan-ues animate-pulse" : "bg-amber-500"}`} title={(geminiKey || hasServerKey) ? "Gemini Key Active" : "Local Fallback Active"} />
             </div>
 
             {/* Tabs */}
@@ -793,6 +900,11 @@ export default function AddPostPage() {
                 <p className="text-[10px] text-mint-700 leading-normal">
                   Generates scroll-stopping hooks and alternative titles based on your current Title and Description.
                 </p>
+                {!title.trim() && (
+                  <p className="text-[10px] text-amber-500 font-medium leading-normal bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-xl">
+                    ⚠️ Please type a post Title in the left form first to generate hooks.
+                  </p>
+                )}
                 <Button
                   type="button"
                   variant="outline"
@@ -834,6 +946,11 @@ export default function AddPostPage() {
                 <p className="text-[10px] text-mint-700 leading-normal">
                   Improves search tags, structures descriptions, and generates engaging Calls to Action (CTAs).
                 </p>
+                {!title.trim() && (
+                  <p className="text-[10px] text-amber-500 font-medium leading-normal bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-xl">
+                    ⚠️ Please type a post Title in the left form first to optimize your draft.
+                  </p>
+                )}
                 <Button
                   type="button"
                   variant="outline"

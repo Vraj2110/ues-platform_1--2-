@@ -196,7 +196,7 @@ Return ONLY a JSON object in this exact format:
         }
 
         const apiResponse = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${geminiApiKey}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${geminiApiKey}`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -206,7 +206,7 @@ Return ONLY a JSON object in this exact format:
               generationConfig: {
                 temperature: 0.75,
                 topP: 0.95,
-                maxOutputTokens: 1024,
+                maxOutputTokens: 4096,
                 responseMimeType: "application/json"
               }
             })
@@ -217,11 +217,29 @@ Return ONLY a JSON object in this exact format:
           const data = await apiResponse.json();
           const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
           if (responseText) {
-            const parsed = JSON.parse(responseText.trim());
-            return NextResponse.json(parsed);
+            let jsonText = responseText.trim();
+            if (jsonText.startsWith("```")) {
+              jsonText = jsonText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+            }
+            jsonText = jsonText.trim();
+            try {
+              const parsed = JSON.parse(jsonText);
+              return NextResponse.json(parsed);
+            } catch (jsonErr) {
+              console.warn("[Suggest] Direct JSON.parse failed, attempting fallback boundary parsing. Raw output:", responseText);
+              const startIdx = jsonText.indexOf("{");
+              const endIdx = jsonText.lastIndexOf("}");
+              if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+                const subJson = jsonText.substring(startIdx, endIdx + 1);
+                const parsed = JSON.parse(subJson);
+                return NextResponse.json(parsed);
+              }
+              throw jsonErr;
+            }
           }
         } else {
-          console.error("Gemini Suggest API error status:", apiResponse.status);
+          const errText = await apiResponse.text();
+          console.error("Gemini Suggest API error status:", apiResponse.status, errText);
         }
       } catch (err) {
         console.error("Gemini suggest call failed, using local fallback:", err);

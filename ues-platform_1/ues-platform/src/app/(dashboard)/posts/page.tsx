@@ -79,6 +79,7 @@ export default function ContentPage() {
   const {
     allPosts,
     checkingYoutubeConnection,
+    isLoading,
     platformErrors,
     deletePost,
     refreshNow,
@@ -297,7 +298,26 @@ export default function ContentPage() {
         </div>
 
         {/* Content Grid */}
-        {filtered.length === 0 ? (
+        {isLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="ues-card animate-pulse shimmer-wrapper p-0 overflow-hidden border border-cyan-border/10 bg-teal-surface/10">
+                <div className="relative w-full h-44 bg-teal-surface/40" />
+                <div className="p-5 space-y-4">
+                  <div className="space-y-2">
+                    <div className="h-3.5 w-full bg-teal-surface/40 rounded" />
+                    <div className="h-3.5 w-2/3 bg-teal-surface/40 rounded" />
+                  </div>
+                  <div className="h-3 w-1/4 bg-teal-surface/40 rounded" />
+                  <div className="border-t border-cyan-border/5 pt-4 flex justify-between">
+                    <div className="h-3 w-16 bg-teal-surface/30 rounded" />
+                    <div className="h-3 w-12 bg-teal-surface/30 rounded" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
           <Card className="text-center py-16">
             <div className="text-4xl mb-3">📭</div>
             <h3 className="font-display font-bold text-lg mb-2">No Content Found</h3>

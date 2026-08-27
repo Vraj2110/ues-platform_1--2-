@@ -275,7 +275,9 @@ export function syncCustomPostsWithLiveOrigin(uid: string, platformId: string, l
           const postPlat = post.platform === "twitter" ? "x" : post.platform;
           if (postPlat === targetPlatform) {
             const rawId = String(post.platformPostId || post.id || "").replace(/^(ig-live-|yt-live-|x-live-|fb-live-|li-live-|th-live-|ig-|yt-|x-|fb-|li-|th-)/, "");
-            if (post.id.includes("processing") || post._addedAt) return true;
+            if (post.id.includes("processing")) return true;
+            const isLive = post.id.includes("-live-") || !!post.platformPostId;
+            if (!isLive && post._addedAt) return true;
             return liveSet.has(String(post.id)) || liveSet.has(String(post.platformPostId)) || liveSet.has(rawId);
           }
           return true;

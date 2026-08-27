@@ -976,14 +976,14 @@ Format all responses in clear Markdown with headings, bullet points, and bold te
         contents.push({ role: "user", parts: [{ text: isReport ? "Generate my executive performance report." : message }] });
 
         let apiResponse = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${geminiApiKey}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${geminiApiKey}`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               contents,
               systemInstruction: { parts: [{ text: systemPrompt }] },
-              generationConfig: { temperature: 0.65, topP: 0.95, maxOutputTokens: 2048 },
+              generationConfig: { temperature: 0.65, topP: 0.95, maxOutputTokens: 4096 },
               tools: [{ googleSearch: {} }] // Enable live Google Search grounding
             })
           }
@@ -1000,14 +1000,14 @@ Format all responses in clear Markdown with headings, bullet points, and bold te
               .replace("Do NOT answer from old training knowledge or guess. Retrieve current information from reliable sources first, then provide a concise answer based on the latest available data.", "Provide the best available information from your training data, combined with the user's analytics stats.");
 
             apiResponse = await fetch(
-              `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${geminiApiKey}`,
+              `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${geminiApiKey}`,
               {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                   contents,
                   systemInstruction: { parts: [{ text: fallbackSystemPrompt }] },
-                  generationConfig: { temperature: 0.65, topP: 0.95, maxOutputTokens: 2048 }
+                  generationConfig: { temperature: 0.65, topP: 0.95, maxOutputTokens: 4096 }
                 })
               }
             );

@@ -249,11 +249,12 @@ export async function refreshGoogleToken(refreshToken: string) {
 
 export async function fetchYouTubeChannel(accessToken: string) {
   const params = new URLSearchParams({
-    part: "snippet,statistics",
+    part: "snippet,statistics,contentDetails",
     mine: "true",
   });
   const res = await fetch(`${YOUTUBE_CHANNELS_URL}?${params.toString()}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
+    cache: "no-store",
   });
   if (!res.ok) {
     const text = await res.text();
@@ -269,6 +270,7 @@ export async function fetchYouTubeChannelId(accessToken: string) {
   });
   const res = await fetch(`${YOUTUBE_CHANNELS_URL}?${params.toString()}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
+    cache: "no-store",
   });
   if (!res.ok) {
     const text = await res.text();
@@ -291,6 +293,7 @@ export async function fetchYouTubeAnalyticsReport(accessToken: string, refreshTo
   async function request(token: string) {
     const res = await fetch(url.toString(), {
       headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
     });
 
     if (res.status === 401 && refreshToken) {
@@ -313,25 +316,61 @@ export async function fetchYouTubeAnalyticsReport(accessToken: string, refreshTo
 }
 
 export async function fetchYouTubeRecentVideos(accessToken: string, refreshToken?: string, maxResults = 50) {
-  async function fetchSearchPage(token: string, pageToken?: string) {
-    const searchUrl = new URL(YOUTUBE_SEARCH_URL);
-    searchUrl.searchParams.set("part", "snippet");
-    searchUrl.searchParams.set("forMine", "true");
-    searchUrl.searchParams.set("type", "video");
-    searchUrl.searchParams.set("order", "date");
-    searchUrl.searchParams.set("maxResults", String(maxResults));
-    if (pageToken) searchUrl.searchParams.set("pageToken", pageToken);
-
-    const res = await fetch(searchUrl.toString(), {
+  let token = accessToken;
+  let channelData;
+  try {
+    const params = new URLSearchParams({
+      part: "snippet,statistics,contentDetails",
+      mine: "true",
+    });
+    let res = await fetch(`${YOUTUBE_CHANNELS_URL}?${params.toString()}`, {
       headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
     });
 
-    if (res.status === 401 && refreshToken && !pageToken) {
+    if (res.status === 401 && refreshToken) {
       const refreshed = await refreshGoogleToken(refreshToken);
       if (refreshed.access_token) {
-        return fetchSearchPage(refreshed.access_token);
+        token = refreshed.access_token;
+        res = await fetch(`${YOUTUBE_CHANNELS_URL}?${params.toString()}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        });
       }
     }
+
+    if (res.ok) {
+      channelData = await res.json();
+    }
+  } catch (err) {
+    console.error("Failed to fetch YouTube channel details in recent videos sync:", err);
+  }
+
+  const channel = channelData?.items?.[0];
+  const channelId = channel?.id;
+  
+  // uploads playlist is contentDetails.relatedPlaylists.uploads, or UC replaced with UU
+  let uploadsPlaylistId = channel?.contentDetails?.relatedPlaylists?.uploads;
+  if (!uploadsPlaylistId && channelId && channelId.startsWith("UC")) {
+    uploadsPlaylistId = "UU" + channelId.substring(2);
+  }
+
+  if (!uploadsPlaylistId) {
+    console.error("Could not find uploads playlist ID for YouTube sync");
+    return [];
+  }
+
+  async function fetchPlaylistPage(tok: string, pageToken?: string) {
+    const playlistUrl = new URL("https://www.googleapis.com/youtube/v3/playlistItems");
+    playlistUrl.searchParams.set("part", "snippet,contentDetails,status");
+    playlistUrl.searchParams.set("playlistId", uploadsPlaylistId);
+    playlistUrl.searchParams.set("maxResults", String(maxResults));
+    if (pageToken) playlistUrl.searchParams.set("pageToken", pageToken);
+
+    const res = await fetch(playlistUrl.toString(), {
+      headers: { Authorization: `Bearer ${tok}` },
+      cache: "no-store",
+    });
 
     if (!res.ok) {
       return { items: [], nextPageToken: null };
@@ -344,23 +383,23 @@ export async function fetchYouTubeRecentVideos(accessToken: string, refreshToken
     };
   }
 
-  async function request(token: string) {
-    let allSearchItems: any[] = [];
+  async function request(tok: string) {
+    let allPlaylistItems: any[] = [];
     let pageToken: string | null = null;
     let pageCount = 0;
 
     do {
       pageCount++;
-      const pageResult = await fetchSearchPage(token, pageToken || undefined);
-      allSearchItems.push(...pageResult.items);
+      const pageResult = await fetchPlaylistPage(tok, pageToken || undefined);
+      allPlaylistItems.push(...pageResult.items);
       pageToken = pageResult.nextPageToken;
-    } while (pageToken && pageCount < 5);
+    } while (pageToken && pageCount < 2);
 
-    if (allSearchItems.length === 0) {
+    if (allPlaylistItems.length === 0) {
       return [];
     }
 
-    const rawVideoIds = allSearchItems.map((item: any) => item.id?.videoId || item.id).filter(Boolean);
+    const rawVideoIds = allPlaylistItems.map((item: any) => item.snippet?.resourceId?.videoId).filter(Boolean);
     const videoIdChunks: string[][] = [];
     for (let i = 0; i < rawVideoIds.length; i += 50) {
       videoIdChunks.push(rawVideoIds.slice(i, i + 50));
@@ -373,7 +412,8 @@ export async function fetchYouTubeRecentVideos(accessToken: string, refreshToken
       videosUrl.searchParams.set("id", chunk.join(","));
 
       const statsRes = await fetch(videosUrl.toString(), {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${tok}` },
+        cache: "no-store",
       });
 
       if (statsRes.ok) {
@@ -385,8 +425,8 @@ export async function fetchYouTubeRecentVideos(accessToken: string, refreshToken
     }
 
     if (allDetailItems.length === 0) {
-      return allSearchItems.map((item: any) => ({
-        id: item.id?.videoId || item.id,
+      return allPlaylistItems.map((item: any) => ({
+        id: item.snippet?.resourceId?.videoId || item.id,
         title: item.snippet?.title || "YouTube Video",
         thumbnailUrl: item.snippet?.thumbnails?.medium?.url || item.snippet?.thumbnails?.default?.url || "",
         publishedAt: item.snippet?.publishedAt || new Date().toISOString(),
@@ -414,7 +454,7 @@ export async function fetchYouTubeRecentVideos(accessToken: string, refreshToken
       }));
   }
 
-  return request(accessToken);
+  return request(token);
 }
 
 // ─── Twitter / X ────────────────────────────────────────────────────────────
@@ -645,7 +685,8 @@ export async function fetchInstagramRecentMedia(accountId: string, accessToken: 
 
 export async function fetchFacebookRecentPosts(accessToken: string, limit = 20) {
   const pagesRes = await fetch(
-    `https://graph.facebook.com/v19.0/me/accounts?access_token=${accessToken}&fields=id,access_token,followers_count,fan_count`
+    `https://graph.facebook.com/v19.0/me/accounts?access_token=${accessToken}&fields=id,access_token,followers_count,fan_count`,
+    { cache: "no-store" }
   );
   
   let pages: any[] = [{ id: "me", access_token: accessToken, followers_count: 0, fan_count: 0 }];
@@ -667,7 +708,7 @@ export async function fetchFacebookRecentPosts(accessToken: string, limit = 20) 
       access_token: page.access_token || accessToken,
     });
 
-    let postsRes = await fetch(`https://graph.facebook.com/v19.0/${page.id}/posts?${params.toString()}`);
+    let postsRes = await fetch(`https://graph.facebook.com/v19.0/${page.id}/posts?${params.toString()}`, { cache: "no-store" });
     
     if (!postsRes.ok) {
       const errMsg = await postsRes.text();
@@ -680,7 +721,7 @@ export async function fetchFacebookRecentPosts(accessToken: string, limit = 20) 
         limit: String(limit),
         access_token: page.access_token || accessToken,
       });
-      postsRes = await fetch(`https://graph.facebook.com/v19.0/${page.id}/posts?${retryParams.toString()}`);
+      postsRes = await fetch(`https://graph.facebook.com/v19.0/${page.id}/posts?${retryParams.toString()}`, { cache: "no-store" });
     }
 
     if (postsRes.ok) {
@@ -697,7 +738,7 @@ export async function fetchFacebookRecentPosts(accessToken: string, limit = 20) 
     
     // Fallback: If posts endpoint fails or is empty, try the feed endpoint
     if (page.id === "me" || page.id === "me/") {
-      const feedRes = await fetch(`https://graph.facebook.com/v19.0/me/feed?${params.toString()}`);
+      const feedRes = await fetch(`https://graph.facebook.com/v19.0/me/feed?${params.toString()}`, { cache: "no-store" });
       if (feedRes.ok) {
         const feedData = await feedRes.json();
         if (Array.isArray(feedData?.data)) {

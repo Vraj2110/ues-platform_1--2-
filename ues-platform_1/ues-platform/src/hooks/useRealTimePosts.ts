@@ -399,6 +399,7 @@ export function useRealTimePosts() {
     youtubeConnected,
     connectedPlatforms,
     checkingYoutubeConnection,
+    isLoading: checkingYoutubeConnection,
     liveYoutubePosts,
     livePlatformPosts,
     customPosts,
