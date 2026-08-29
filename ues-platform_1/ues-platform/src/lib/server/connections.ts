@@ -68,8 +68,27 @@ function getMemorySecrets(uid: string) {
 export let firestoreError: string | null = null;
 
 export async function getUserConnections(uid: string): Promise<Record<string, PlatformConnection>> {
+  if (uid !== "demo-user") {
+    const fileConns = getMemoryConnections(uid);
+    if (!isFirebaseAdminConfigured) {
+      return fileConns;
+    }
+    try {
+      const snapshot = await adminDb.collection("users").doc(uid).collection("platformConnections").get();
+      const result: Record<string, PlatformConnection> = {};
+      snapshot.docs.forEach((doc: any) => {
+        result[doc.id] = doc.data() as PlatformConnection;
+      });
+      return { ...fileConns, ...result };
+    } catch (error: any) {
+      firestoreError = error?.message || String(error);
+      console.warn("Falling back to persistent connection storage:", error);
+      return fileConns;
+    }
+  }
+
   const fileConns = getMemoryConnections(uid);
-  const demoConns = uid !== "demo-user" ? getMemoryConnections("demo-user") : {};
+  const demoConns = getMemoryConnections("demo-user");
   let combinedMemory = { ...demoConns, ...fileConns };
 
   if (Object.keys(combinedMemory).length === 0) {
@@ -81,23 +100,7 @@ export async function getUserConnections(uid: string): Promise<Record<string, Pl
       }
     }
   }
-
-  if (!isFirebaseAdminConfigured) {
-    return combinedMemory;
-  }
-
-  try {
-    const snapshot = await adminDb.collection("users").doc(uid).collection("platformConnections").get();
-    const result: Record<string, PlatformConnection> = {};
-    snapshot.docs.forEach((doc: any) => {
-      result[doc.id] = doc.data() as PlatformConnection;
-    });
-    return { ...combinedMemory, ...result };
-  } catch (error: any) {
-    firestoreError = error?.message || String(error);
-    console.warn("Falling back to persistent connection storage:", error);
-    return combinedMemory;
-  }
+  return combinedMemory;
 }
 
 export async function setUserConnection(
@@ -125,8 +128,22 @@ export async function setUserConnection(
 }
 
 export async function getUserConnectionSecrets(uid: string, platformId: string) {
+  if (uid !== "demo-user") {
+    const fileSecrets = getMemorySecrets(uid)[platformId] ?? null;
+    if (!isFirebaseAdminConfigured) {
+      return fileSecrets;
+    }
+    try {
+      const snapshot = await userConnectionSecretsDoc(uid, platformId).get();
+      return snapshot.exists ? (snapshot.data() as Record<string, unknown>) : fileSecrets;
+    } catch (error) {
+      console.warn("Falling back to persistent connection secrets:", error);
+      return fileSecrets;
+    }
+  }
+
   const userSecs = getMemorySecrets(uid)[platformId] ?? null;
-  const demoSecs = uid !== "demo-user" ? (getMemorySecrets("demo-user")[platformId] ?? null) : null;
+  const demoSecs = getMemorySecrets("demo-user")[platformId] ?? null;
   let fileSecrets = userSecs || demoSecs;
 
   if (!fileSecrets) {
@@ -138,18 +155,7 @@ export async function getUserConnectionSecrets(uid: string, platformId: string) 
       }
     }
   }
-
-  if (!isFirebaseAdminConfigured) {
-    return fileSecrets;
-  }
-
-  try {
-    const snapshot = await userConnectionSecretsDoc(uid, platformId).get();
-    return snapshot.exists ? (snapshot.data() as Record<string, unknown>) : fileSecrets;
-  } catch (error) {
-    console.warn("Falling back to persistent connection secrets:", error);
-    return fileSecrets;
-  }
+  return fileSecrets;
 }
 
 export async function setUserConnectionSecrets(
