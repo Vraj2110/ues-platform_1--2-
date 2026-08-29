@@ -3,7 +3,13 @@ import { resolveOAuthState } from "@/lib/server/oauth";
 
 function buildRedirectUri(request: Request, envKey?: string) {
   if (envKey && process.env[envKey]) {
-    return process.env[envKey]!;
+    try {
+      const envUrl = new URL(process.env[envKey]!);
+      const reqUrl = new URL(request.url);
+      if (envUrl.host === reqUrl.host) {
+        return process.env[envKey]!;
+      }
+    } catch {}
   }
   return new URL(`/api/connections/oauth-callback`, new URL(request.url).origin).toString();
 }

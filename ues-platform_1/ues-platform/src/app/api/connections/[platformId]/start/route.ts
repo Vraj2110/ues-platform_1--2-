@@ -14,7 +14,12 @@ function buildRedirectUri(request: Request, platformId: string) {
   const configuredRedirectUri = process.env[envKey];
 
   if (configuredRedirectUri) {
-    return configuredRedirectUri;
+    try {
+      const envUrl = new URL(configuredRedirectUri);
+      if (envUrl.host === requestUrl.host) {
+        return configuredRedirectUri;
+      }
+    } catch {}
   }
 
   return new URL(`/api/connections/oauth-callback`, requestUrl.origin).toString();
