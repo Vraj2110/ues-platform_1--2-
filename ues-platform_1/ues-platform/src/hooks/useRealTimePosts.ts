@@ -59,15 +59,13 @@ export function useRealTimePosts() {
 
       const headers: Record<string, string> = token ? { authorization: `Bearer ${token}` } : {};
 
-      // Fetch connections, YouTube videos, custom posts, and all platform posts in parallel
-      const [connRes, videosRes, customRes, platformRes] = await Promise.all([
+      // ── Phase 1: Fast Database Fetching (Connections & Saved Database Posts) ──
+      const [connRes, customRes] = await Promise.all([
         fetch("/api/connections", { headers }).catch(() => null),
-        fetch("/api/connections/youtube/videos", { headers }).catch(() => null),
         fetch("/api/posts/custom", { headers }).catch(() => null),
-        fetch(`/api/connections/platform-posts?_t=${Date.now()}`, { headers }).catch(() => null),
       ]);
 
-      // ── Connections ──────────────────────────────────────────────────────
+      // ── Phase 1 Parse & Render: Connections ──
       let ytConnected = cachedYoutubeConnected;
       let activeSet = new Set<string>(cachedConnectedPlatforms);
       if (connRes && connRes.ok) {
@@ -100,71 +98,100 @@ export function useRealTimePosts() {
         }
       }
 
-      // ── YouTube live videos (strictly public only) ───────────────────────
-      let fetchedYoutubePosts: Post[] = cachedLiveYoutubePosts;
-      if (ytConnected) {
-        if (videosRes && videosRes.ok) {
-          const videoData = await videosRes.json();
-          if (Array.isArray(videoData.videos)) {
-            const videoItems = videoData.videos;
-            let deletedIds = new Set<string>();
-            if (typeof window !== "undefined") {
-              try {
-                const cachedDeleted = localStorage.getItem("ues_deleted_posts");
-                if (cachedDeleted) {
-                  const parsed = JSON.parse(cachedDeleted);
-                  if (Array.isArray(parsed)) deletedIds = new Set(parsed);
-                }
-              } catch {}
-            }
+      cachedYoutubeConnected = ytConnected;
+      cachedConnectedPlatforms = activeSet;
+      setYoutubeConnected(ytConnected);
+      setConnectedPlatforms(activeSet);
 
-            fetchedYoutubePosts = videoItems
-              .filter((v: any) => !deletedIds.has(v.id))
-              .filter((v: any) => !v.privacyStatus || v.privacyStatus === "public")
-              .map((v: any, index: number) => {
-                const views = typeof v.views === "number" ? v.views : null;
-                const likes = typeof v.likes === "number" ? v.likes : null;
-                const comments = typeof v.comments === "number" ? v.comments : null;
-
-                const metricsData = {
-                  likes,
-                  comments,
-                  shares: null,
-                  views,
-                  saves: null,
-                  reach: null,
-                  impressions: null,
-                  followerCount: v.followerCount || null,
-                  dataSource: "youtube_api",
-                  syncStatus: "success" as const,
-                };
-
-                const { score, engagementRate } = calculateUnifiedEngagement(metricsData);
-
-                return {
-                  id: `yt-live-${v.id || index}`,
-                  platform: "youtube" as const,
-                  title: v.title || "YouTube Channel Video",
-                  thumbnailUrl: v.thumbnailUrl || undefined,
-                  url: v.id ? `https://www.youtube.com/watch?v=${v.id}` : undefined,
-                  type: "video" as const,
-                  status: "active" as const,
-                  privacyStatus: "public",
-                  metrics: {
-                    ...metricsData,
-                    engagementRate,
-                  },
-                  uesScore: score,
-                  publishedAt: v.publishedAt ? new Date(v.publishedAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
-                } as Post;
-              });
-          }
+      // ── Phase 1 Parse & Render: Custom posts (Authoritative Synced Posts) ──
+      let customUserPosts: Post[] = cachedCustomPosts;
+      if (customRes && customRes.ok) {
+        const customData = await customRes.json();
+        if (Array.isArray(customData.posts)) {
+          customUserPosts = customData.posts;
         }
-      } else {
+      } else if (typeof window !== "undefined" && !hasFetchedPostsOnce) {
+        try {
+          const cachedCustom = localStorage.getItem("ues_custom_posts");
+          if (cachedCustom) {
+            const parsed = JSON.parse(cachedCustom);
+            if (Array.isArray(parsed)) customUserPosts = parsed;
+          }
+        } catch {}
+      }
+
+      cachedCustomPosts = customUserPosts;
+      setCustomPosts(customUserPosts);
+
+      // ── Phase 2: Slow Background Fetching (Live YouTube & Live Platform Feeds) ──
+      const [videosRes, platformRes] = await Promise.all([
+        ytConnected ? fetch("/api/connections/youtube/videos", { headers }).catch(() => null) : Promise.resolve(null),
+        fetch(`/api/connections/platform-posts?_t=${Date.now()}`, { headers }).catch(() => null),
+      ]);
+
+      // ── Phase 2 Parse & Render: YouTube live videos ──
+      let fetchedYoutubePosts: Post[] = cachedLiveYoutubePosts;
+      if (ytConnected && videosRes && videosRes.ok) {
+        const videoData = await videosRes.json();
+        if (Array.isArray(videoData.videos)) {
+          const videoItems = videoData.videos;
+          let deletedIds = new Set<string>();
+          if (typeof window !== "undefined") {
+            try {
+              const cachedDeleted = localStorage.getItem("ues_deleted_posts");
+              if (cachedDeleted) {
+                const parsed = JSON.parse(cachedDeleted);
+                if (Array.isArray(parsed)) deletedIds = new Set(parsed);
+              }
+            } catch {}
+          }
+
+          fetchedYoutubePosts = videoItems
+            .filter((v: any) => !deletedIds.has(v.id))
+            .filter((v: any) => !v.privacyStatus || v.privacyStatus === "public")
+            .map((v: any, index: number) => {
+              const views = typeof v.views === "number" ? v.views : null;
+              const likes = typeof v.likes === "number" ? v.likes : null;
+              const comments = typeof v.comments === "number" ? v.comments : null;
+
+              const metricsData = {
+                likes,
+                comments,
+                shares: null,
+                views,
+                saves: null,
+                reach: null,
+                impressions: null,
+                followerCount: v.followerCount || null,
+                dataSource: "youtube_api",
+                syncStatus: "success" as const,
+              };
+
+              const { score, engagementRate } = calculateUnifiedEngagement(metricsData);
+
+              return {
+                id: `yt-live-${v.id || index}`,
+                platform: "youtube" as const,
+                title: v.title || "YouTube Channel Video",
+                thumbnailUrl: v.thumbnailUrl || undefined,
+                url: v.id ? `https://www.youtube.com/watch?v=${v.id}` : undefined,
+                type: "video" as const,
+                status: "active" as const,
+                privacyStatus: "public",
+                metrics: {
+                  ...metricsData,
+                  engagementRate,
+                },
+                uesScore: score,
+                publishedAt: v.publishedAt ? new Date(v.publishedAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+              } as Post;
+            });
+        }
+      } else if (!ytConnected) {
         fetchedYoutubePosts = [];
       }
 
-      // ── Live posts from all other platforms ──
+      // ── Phase 2 Parse & Render: Live posts from all other platforms ──
       let fetchedPlatformPosts: Post[] = cachedLivePlatformPosts;
       let fetchedErrors: string[] = cachedPlatformErrors;
       if (platformRes && platformRes.ok) {
@@ -196,42 +223,15 @@ export function useRealTimePosts() {
         ];
       }
 
-      // ── Custom posts ──
-      let customUserPosts: Post[] = cachedCustomPosts;
-      if (customRes && customRes.ok) {
-        const customData = await customRes.json();
-        if (Array.isArray(customData.posts)) {
-          customUserPosts = customData.posts;
-        }
-      } else if (typeof window !== "undefined" && !hasFetchedPostsOnce) {
-        try {
-          const cachedCustom = localStorage.getItem("ues_custom_posts");
-          if (cachedCustom) {
-            const parsed = JSON.parse(cachedCustom);
-            if (Array.isArray(parsed)) customUserPosts = parsed;
-          }
-        } catch {}
-      }
-
-      // customPosts from /api/posts/custom already reflects the authoritative synced state.
-      // Do NOT sanitize against fetchedPlatformPosts (which is only a partial live sample).
-      // The sync engine (POST /api/sync) is the single source of truth.
-
       // Update global cache
-      cachedYoutubeConnected = ytConnected;
-      cachedConnectedPlatforms = activeSet;
       cachedCheckingYoutubeConnection = false;
       cachedLiveYoutubePosts = fetchedYoutubePosts;
       cachedLivePlatformPosts = fetchedPlatformPosts;
-      cachedCustomPosts = customUserPosts;
       cachedPlatformErrors = fetchedErrors;
       hasFetchedPostsOnce = true;
 
-      setYoutubeConnected(ytConnected);
-      if (activeSet.size > 0) setConnectedPlatforms(activeSet);
       setLiveYoutubePosts(fetchedYoutubePosts);
       setLivePlatformPosts(fetchedPlatformPosts);
-      setCustomPosts(customUserPosts);
       setPlatformErrors(fetchedErrors);
     } catch (err) {
       console.warn("[useRealTimePosts] fetch error:", err);
