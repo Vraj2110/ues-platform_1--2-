@@ -118,6 +118,7 @@ export type OAuthStateRecord = {
   platform: string;
   createdAt: number;
   codeVerifier?: string;
+  origin?: string;
 };
 
 const oauthStateDoc = (state: string) => adminDb.collection("oauthStates").doc(state);
@@ -154,7 +155,7 @@ async function deleteOAuthState(state: string) {
   inMemoryOAuthStates.delete(state);
 }
 
-export async function createOAuthState(uid: string, platform: string, codeVerifier?: string) {
+export async function createOAuthState(uid: string, platform: string, codeVerifier?: string, origin?: string) {
   const payload: OAuthStateRecord = {
     uid,
     platform,
@@ -162,6 +163,9 @@ export async function createOAuthState(uid: string, platform: string, codeVerifi
   };
   if (codeVerifier) {
     payload.codeVerifier = codeVerifier;
+  }
+  if (origin) {
+    payload.origin = origin;
   }
   const state = Buffer.from(JSON.stringify(payload)).toString("base64url");
   await saveOAuthState(state, payload);

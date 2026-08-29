@@ -98,9 +98,20 @@ export async function GET(request: Request) {
 
   const reqUrl = new URL(request.url);
   const host = reqUrl.host.replace(":3001", ":3000");
-  const origin = `http://${host}`;
+  const protocol = reqUrl.protocol;
+  const defaultOrigin = `${protocol}//${host}`;
+
+  let targetOrigin = defaultOrigin;
+  let record: any = null;
+  if (state) {
+    record = await resolveOAuthState(state);
+    if (record?.origin) {
+      targetOrigin = record.origin;
+    }
+  }
+
   if (error) {
-    const redirectUrl = new URL(`/connect`, origin);
+    const redirectUrl = new URL(`/connect`, targetOrigin);
     redirectUrl.searchParams.set("error", error);
     if (state) {
       redirectUrl.searchParams.set("state", state);
@@ -109,13 +120,12 @@ export async function GET(request: Request) {
   }
 
   if (!state || !code) {
-    const r = new URL(`/connect?error=missing_oauth_parameters`, origin);
+    const r = new URL(`/connect?error=missing_oauth_parameters`, targetOrigin);
     return NextResponse.redirect(r);
   }
 
-  const record = await resolveOAuthState(state);
   if (!record) {
-    const r = new URL(`/connect?error=invalid_state`, origin);
+    const r = new URL(`/connect?error=invalid_state`, targetOrigin);
     return NextResponse.redirect(r);
   }
 
@@ -246,14 +256,14 @@ export async function GET(request: Request) {
         createdAt: new Date().toISOString(),
       });
     }
-    const redirectUrl = new URL(`/connect`, origin);
+    const redirectUrl = new URL(`/connect`, targetOrigin);
     redirectUrl.searchParams.set("success", "connected");
     redirectUrl.searchParams.set("platform", platform === "google" ? "youtube" : (platform || "youtube"));
     return NextResponse.redirect(redirectUrl);
   } catch (err) {
     console.error("OAuth callback failed:", err);
     const reason = encodeURIComponent(String(err instanceof Error ? err.message : String(err) || "unknown_error"));
-    const redirectUrl = new URL(`/connect`, origin);
+    const redirectUrl = new URL(`/connect`, targetOrigin);
     redirectUrl.searchParams.set("error", "oauth_failed");
     redirectUrl.searchParams.set("reason", reason);
     return NextResponse.redirect(redirectUrl);

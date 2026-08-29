@@ -29,16 +29,17 @@ export async function POST(request: Request, { params }: { params: { platformId:
     }
     const uid = (decoded as any).uid as string;
     const { platformId } = params;
+    const origin = new URL(request.url).origin;
     
     // For Twitter/X, we need PKCE
     let state: string;
     let codeChallengeStr: string | null = null;
     if (platformId === "x") {
       const { codeVerifier, codeChallenge } = generatePKCE();
-      state = await createOAuthState(uid, platformId, codeVerifier);
+      state = await createOAuthState(uid, platformId, codeVerifier, origin);
       codeChallengeStr = codeChallenge;
     } else {
-      state = await createOAuthState(uid, platformId);
+      state = await createOAuthState(uid, platformId, undefined, origin);
     }
 
     const redirectUri = buildRedirectUri(request, platformId);
