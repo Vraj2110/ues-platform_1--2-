@@ -246,8 +246,8 @@ export function useRealTimePosts() {
   // ── Build the merged post list ───────────────────────────────────────────
   const hasAnyConnection = youtubeConnected || connectedPlatforms.size > 0;
 
-  // Static demo fallback — only show if NO real accounts are connected
-  const staticFallback = POSTS.filter(() => !hasAnyConnection);
+  // Static demo fallback — only show if NO real accounts are connected and we are not in loading/checking phase
+  const staticFallback = checkingYoutubeConnection ? [] : POSTS.filter(() => !hasAnyConnection);
 
   // Normalize platform names (e.g., twitter -> x)
   // customPosts = DB synced posts (authoritative after POST /api/sync)
@@ -262,17 +262,9 @@ export function useRealTimePosts() {
     platform: "youtube" as const,
   }));
 
-  // livePlatformPosts is a partial live sample (page-1 only).
-  // We include it ONLY to fill platforms that have no DB posts yet.
-  // Build a set of platforms already covered by DB (customPosts)
-  const dbPlatforms = new Set(normCustom.map((p) => p.platform as string));
-
-  // Only include live platform posts for platforms NOT already in DB store
+  // Include both database posts and live platform posts, allowing the deduplication map below
+  // to merge them seamlessly. This ensures live posts show up even if not fully database-synced yet.
   const normPlatform = livePlatformPosts
-    .filter((p) => {
-      const plat = (p.platform as string) === "twitter" ? "x" : p.platform;
-      return !dbPlatforms.has(plat as string);
-    })
     .map((p) => ({
       ...p,
       platform: (p.platform as string) === "twitter" ? ("x" as const) : p.platform,
