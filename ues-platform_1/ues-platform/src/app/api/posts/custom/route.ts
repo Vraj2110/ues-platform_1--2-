@@ -8,7 +8,7 @@ export async function GET(request: Request) {
   try {
     const decoded = await verifyIdToken(request);
     const uid = (decoded as any)?.uid || "demo-user";
-    const customPosts = getCustomUserPosts(uid);
+    const customPosts = await getCustomUserPosts(uid);
     return NextResponse.json({ posts: customPosts });
   } catch (error) {
     console.error("Error fetching custom posts:", error);

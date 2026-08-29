@@ -19,7 +19,7 @@ export async function POST(request: Request) {
 
     const connections = await getUserConnections(uid);
     const adapters = getAllPlatformAdapters();
-    const deletedPostSet = getDeletedPostIds(uid);
+    const deletedPostSet = await getDeletedPostIds(uid);
 
     let totalChecked = 0;
     let totalNew = 0;
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
         const liveIds = fetchedPosts.map((p) => p.platformPostId);
 
         // Detect external deletions & reconcile
-        const previousPosts = getCustomUserPosts(uid).filter((p: any) => p.platform === platId);
+        const previousPosts = (await getCustomUserPosts(uid)).filter((p: any) => p.platform === platId);
         const previousIdSet = new Set(previousPosts.map((p: any) => String(p.platformPostId || p.id).replace(/^(ig-live-|yt-live-|x-live-|fb-live-|ig-|yt-|x-|fb-)/, "")));
         const fetchedIdSet = new Set(liveIds);
 
@@ -106,7 +106,7 @@ export async function POST(request: Request) {
         const isMockXResult = platId === "x" && liveIds.includes("mock-tweet-1");
         if (!isMockXResult) {
           try {
-            syncCustomPostsWithLiveOrigin(uid, platId, liveIds);
+            await syncCustomPostsWithLiveOrigin(uid, platId, liveIds);
           } catch {}
         }
 

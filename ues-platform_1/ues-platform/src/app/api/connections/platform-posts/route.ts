@@ -292,7 +292,7 @@ export async function GET(request: Request) {
 
     await Promise.all(platformTasks);
 
-    const deletedSet = getDeletedPostIds(uid);
+    const deletedSet = await getDeletedPostIds(uid);
     const activePosts = posts.filter((p) => {
       const rawId = p.id.replace(/^(ig-live-|yt-live-|x-live-|fb-live-|li-live-|th-live-|ig-|yt-|x-|fb-|li-|th-)/, "");
       return !deletedSet.has(p.id) && !deletedSet.has(rawId);

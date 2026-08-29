@@ -56,8 +56,8 @@ export async function POST(request: Request) {
     }
 
     // 2. Persist deleted status server-side
-    saveDeletedPostId(uid, postId);
-    deleteCustomUserPost(uid, postId);
+    await saveDeletedPostId(uid, postId);
+    await deleteCustomUserPost(uid, postId);
 
     return NextResponse.json({
       success: true,

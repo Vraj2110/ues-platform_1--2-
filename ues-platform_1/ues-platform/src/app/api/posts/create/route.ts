@@ -299,25 +299,58 @@ export async function POST(request: Request) {
       if (!isMock && accessToken) {
         const fbText = description ? `${title.trim()}\n\n${description}` : title.trim();
 
-        // Prepare raw buffer if a file was uploaded via multipart
-        let rawFileBuffer: Buffer | undefined;
-        let rawFileName: string | undefined;
-        let rawFileMime: string | undefined;
-        if (videoFile) {
-          const arrBuf = await videoFile.arrayBuffer();
-          rawFileBuffer = Buffer.from(arrBuf);
-          rawFileName = videoFile.name;
-          rawFileMime = videoFile.type;
+        // Re-host tmpfiles.org image to freeimage.host for Facebook so Meta's CDN can fetch it safely
+        let finalMediaUrl = mediaUrl || thumbnailUrl;
+        if (finalMediaUrl?.includes("tmpfiles.org") && mediaType === "image") {
+          console.log("Re-hosting Facebook image from tmpfiles.org to freeimage.host...", finalMediaUrl);
+          try {
+            let actualDownloadUrl = finalMediaUrl;
+            const viewerRes = await fetch(finalMediaUrl.replace('/dl/', '/'), {
+              headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
+            });
+            if (viewerRes.ok) {
+              const html = await viewerRes.text();
+              const match = html.match(/href="(https:\/\/tmpfiles\.org\/dl\/[^"]+)"/);
+              if (match && match[1]) {
+                actualDownloadUrl = match[1];
+              }
+            }
+            const tmpFileRes = await fetch(actualDownloadUrl, {
+              headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
+            });
+            if (tmpFileRes.ok) {
+              const arrayBuffer = await tmpFileRes.arrayBuffer();
+              const base64Data = Buffer.from(arrayBuffer).toString('base64');
+              const form = new URLSearchParams();
+              form.append('key', '6d207e02198a847aa98d0a2a901485a5');
+              form.append('action', 'upload');
+              form.append('source', base64Data);
+              form.append('format', 'json');
+              const fiRes = await fetch('https://freeimage.host/api/1/upload', {
+                method: 'POST',
+                body: form,
+              });
+              if (fiRes.ok) {
+                const fiData = await fiRes.json();
+                if (fiData.image?.url) {
+                  finalMediaUrl = fiData.image.url;
+                  console.log("Facebook image successfully re-hosted:", finalMediaUrl);
+                }
+              }
+            }
+          } catch (err) {
+            console.error("Failed to re-host Facebook image:", err);
+          }
         }
 
         const result = await publishToFacebook(
           accessToken,
           fbText,
-          mediaUrl || thumbnailUrl || undefined,
-          mediaType || (mediaUrl || thumbnailUrl ? "image" : undefined),
-          rawFileBuffer,
-          rawFileName,
-          rawFileMime,
+          finalMediaUrl || undefined,
+          mediaType || (finalMediaUrl ? "image" : undefined),
+          undefined,
+          undefined,
+          undefined,
         );
 
         if (result.success) {
@@ -327,18 +360,16 @@ export async function POST(request: Request) {
             title: fbText.slice(0, 120),
             description: description || "",
             url: result.url,
-            type: rawFileMime?.startsWith("video/") || mediaType === "video" ? "video" : (rawFileBuffer || mediaUrl ? "photo" : "post"),
+            type: mediaType === "video" ? "video" : (finalMediaUrl ? "photo" : "post"),
             status: "active",
             privacyStatus: "public",
             category: "Social",
-            thumbnailUrl: mediaType === "image" ? (mediaUrl || thumbnailUrl || "") : "",
+            thumbnailUrl: mediaType === "image" ? (finalMediaUrl || "") : "",
             metrics: { likes: 0, comments: 0, shares: 0, views: 0, saves: 0, followerCount: 0 },
             uesScore: 78,
             publishedAt: postDate,
             _addedAt: Date.now(),
           };
-          // Real published FB post is fetched via API on sync, do not save local duplicate
-          // try { saveCustomUserPost(uid, postObj); } catch (e) { console.warn("Save error:", e); }
           return NextResponse.json({
             success: true,
             message: "✓ Post published successfully to Facebook!",

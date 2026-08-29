@@ -236,7 +236,7 @@ export async function clearUserConnection(uid: string, platformId: string) {
   }
 }
 
-export function saveCustomUserPost(uid: string, post: any) {
+export async function saveCustomUserPost(uid: string, post: any) {
   if (!memoryStore.customPosts) {
     memoryStore.customPosts = {};
   }
@@ -246,7 +246,6 @@ export function saveCustomUserPost(uid: string, post: any) {
   memoryStore.customPosts[uid] = memoryStore.customPosts[uid].filter((p: any) => p.id !== post.id);
   memoryStore.customPosts[uid].unshift(post);
 
-  // Also store under demo-user if uid is different so unauthenticated sessions see it
   if (uid && uid !== "demo-user") {
     if (!memoryStore.customPosts["demo-user"]) {
       memoryStore.customPosts["demo-user"] = [];
@@ -256,9 +255,17 @@ export function saveCustomUserPost(uid: string, post: any) {
   }
 
   saveStore(memoryStore);
+
+  if (isFirebaseAdminConfigured && uid !== "demo-user") {
+    try {
+      await adminDb.collection("users").doc(uid).collection("posts").doc(post.id).set(post, { merge: true });
+    } catch (error) {
+      console.warn("Firestore custom post save warning:", error);
+    }
+  }
 }
 
-export function deleteCustomUserPost(uid: string, postId: string) {
+export async function deleteCustomUserPost(uid: string, postId: string) {
   if (memoryStore.customPosts?.[uid]) {
     memoryStore.customPosts[uid] = memoryStore.customPosts[uid].filter(
       (p: any) => p.id !== postId && p.videoId !== postId
@@ -270,9 +277,17 @@ export function deleteCustomUserPost(uid: string, postId: string) {
     );
   }
   saveStore(memoryStore);
+
+  if (isFirebaseAdminConfigured && uid !== "demo-user") {
+    try {
+      await adminDb.collection("users").doc(uid).collection("posts").doc(postId).delete();
+    } catch (error) {
+      console.warn("Firestore custom post delete warning:", error);
+    }
+  }
 }
 
-export function syncCustomPostsWithLiveOrigin(uid: string, platformId: string, liveIds: string[]) {
+export async function syncCustomPostsWithLiveOrigin(uid: string, platformId: string, liveIds: string[]) {
   if (memoryStore.customPosts) {
     const liveSet = new Set((liveIds || []).map((id) => String(id)));
     const targetPlatform = platformId === "twitter" ? "x" : platformId;
@@ -295,9 +310,37 @@ export function syncCustomPostsWithLiveOrigin(uid: string, platformId: string, l
     });
     saveStore(memoryStore);
   }
+
+  if (isFirebaseAdminConfigured && uid !== "demo-user") {
+    try {
+      const liveSet = new Set((liveIds || []).map((id) => String(id)));
+      const targetPlatform = platformId === "twitter" ? "x" : platformId;
+
+      const snapshot = await adminDb.collection("users").doc(uid).collection("posts").get();
+      const deletePromises = snapshot.docs.map(async (doc: any) => {
+        const post = doc.data();
+        const postPlat = post.platform === "twitter" ? "x" : post.platform;
+        if (postPlat === targetPlatform) {
+          const rawId = String(post.platformPostId || post.id || "").replace(/^(ig-live-|yt-live-|x-live-|fb-live-|li-live-|th-live-|ig-|yt-|x-|fb-|li-|th-)/, "");
+          if (post.id.includes("processing")) return;
+          const isLive = post.id.includes("-live-") || !!post.platformPostId;
+          if (!isLive && post._addedAt) return;
+
+          const keep = liveSet.has(String(post.id)) || liveSet.has(String(post.platformPostId)) || liveSet.has(rawId);
+          if (!keep) {
+            console.log(`[Firestore Sync] Deleting post ${doc.id} (not found in live feed)`);
+            await doc.ref.delete();
+          }
+        }
+      });
+      await Promise.all(deletePromises);
+    } catch (err) {
+      console.warn("Failed to sync Firestore custom posts with live origin:", err);
+    }
+  }
 }
 
-export function updateCustomPostThumbnail(uid: string, videoId: string, thumbnailUrl: string) {
+export async function updateCustomPostThumbnail(uid: string, videoId: string, thumbnailUrl: string) {
   if (memoryStore.customPosts?.[uid]) {
     memoryStore.customPosts[uid] = memoryStore.customPosts[uid].map((post: any) => {
       if (post.id === videoId || post.videoId === videoId || post.id === `yt-${videoId}` || videoId.endsWith(post.id) || post.id.endsWith(videoId)) {
@@ -307,9 +350,25 @@ export function updateCustomPostThumbnail(uid: string, videoId: string, thumbnai
     });
     saveStore(memoryStore);
   }
+
+  if (isFirebaseAdminConfigured && uid !== "demo-user") {
+    try {
+      const postsRef = adminDb.collection("users").doc(uid).collection("posts");
+      const snapshot = await postsRef.get();
+      const updatePromises = snapshot.docs.map(async (doc: any) => {
+        const post = doc.data();
+        if (post.id === videoId || post.videoId === videoId || post.id === `yt-${videoId}` || videoId.endsWith(post.id) || post.id.endsWith(videoId)) {
+          await doc.ref.update({ thumbnailUrl });
+        }
+      });
+      await Promise.all(updatePromises);
+    } catch (err) {
+      console.warn("Failed to update post thumbnail in Firestore:", err);
+    }
+  }
 }
 
-export function updateCustomPostId(uid: string, oldId: string, newId: string) {
+export async function updateCustomPostId(uid: string, oldId: string, newId: string) {
   if (memoryStore.customPosts?.[uid]) {
     memoryStore.customPosts[uid] = memoryStore.customPosts[uid].map((post: any) => {
       if (post.id === oldId) {
@@ -319,9 +378,27 @@ export function updateCustomPostId(uid: string, oldId: string, newId: string) {
     });
     saveStore(memoryStore);
   }
+
+  if (isFirebaseAdminConfigured && uid !== "demo-user") {
+    try {
+      const postsRef = adminDb.collection("users").doc(uid).collection("posts");
+      const oldDoc = await postsRef.doc(oldId).get();
+      if (oldDoc.exists) {
+        const data = oldDoc.data();
+        await postsRef.doc(newId).set({
+          ...data,
+          id: newId,
+          url: `https://www.youtube.com/watch?v=${newId}`,
+        });
+        await postsRef.doc(oldId).delete();
+      }
+    } catch (err) {
+      console.warn("Failed to update post ID in Firestore:", err);
+    }
+  }
 }
 
-export function getCustomUserPosts(uid: string): any[] {
+export async function getCustomUserPosts(uid: string): Promise<any[]> {
   const userPosts = memoryStore.customPosts?.[uid] || [];
   const demoPosts = memoryStore.customPosts?.["demo-user"] || [];
   let combined = [...userPosts, ...demoPosts];
@@ -336,13 +413,25 @@ export function getCustomUserPosts(uid: string): any[] {
     }
   }
 
-  // Combine posts, deduplicating by id
+  if (isFirebaseAdminConfigured && uid !== "demo-user") {
+    try {
+      const snapshot = await adminDb.collection("users").doc(uid).collection("posts").get();
+      const firestorePosts = snapshot.docs.map((doc: any) => doc.data());
+      const postMap = new Map<string, any>();
+      combined.forEach((p) => postMap.set(p.id, p));
+      firestorePosts.forEach((p: any) => postMap.set(p.id, p));
+      return Array.from(postMap.values());
+    } catch (error) {
+      console.warn("Falling back to memory for custom posts read:", error);
+    }
+  }
+
   const postMap = new Map<string, any>();
   combined.forEach((p) => postMap.set(p.id, p));
   return Array.from(postMap.values());
 }
 
-export function saveDeletedPostId(uid: string, postId: string) {
+export async function saveDeletedPostId(uid: string, postId: string) {
   if (!memoryStore.deletedPosts) {
     memoryStore.deletedPosts = {};
   }
@@ -361,10 +450,34 @@ export function saveDeletedPostId(uid: string, postId: string) {
     }
   }
   saveStore(memoryStore);
+
+  if (isFirebaseAdminConfigured && uid !== "demo-user") {
+    try {
+      await adminDb.collection("users").doc(uid).collection("deletedPosts").doc(postId).set({
+        postId,
+        deletedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.warn("Firestore deleted post save warning:", error);
+    }
+  }
 }
 
-export function getDeletedPostIds(uid: string): Set<string> {
+export async function getDeletedPostIds(uid: string): Promise<Set<string>> {
   const userDeleted = memoryStore.deletedPosts?.[uid] || [];
   const demoDeleted = memoryStore.deletedPosts?.["demo-user"] || [];
-  return new Set([...userDeleted, ...demoDeleted]);
+  const combined = new Set([...userDeleted, ...demoDeleted]);
+
+  if (isFirebaseAdminConfigured && uid !== "demo-user") {
+    try {
+      const snapshot = await adminDb.collection("users").doc(uid).collection("deletedPosts").get();
+      snapshot.docs.forEach((doc: any) => {
+        combined.add(doc.id);
+      });
+    } catch (error) {
+      console.warn("Firestore deleted posts read warning:", error);
+    }
+  }
+
+  return combined;
 }

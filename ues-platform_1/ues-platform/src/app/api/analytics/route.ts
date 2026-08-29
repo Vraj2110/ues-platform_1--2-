@@ -21,7 +21,7 @@ export async function GET(request: Request) {
     const daysFilter = Number(searchParams.get("days") || "30");
 
     const connections = await getUserConnections(uid);
-    const allPosts = getCustomUserPosts(uid);
+    const allPosts = await getCustomUserPosts(uid);
 
     const now = new Date();
     const currentCutoff = new Date(now.getTime() - daysFilter * 24 * 60 * 60 * 1000);

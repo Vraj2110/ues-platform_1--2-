@@ -883,7 +883,7 @@ export async function POST(request: Request) {
     }
 
     const connections = await getUserConnections(uid);
-    const allPosts = getCustomUserPosts(uid);
+    const allPosts = await getCustomUserPosts(uid);
 
     const now = new Date();
     const daysFilter = 30;

@@ -131,7 +131,7 @@ export async function POST(request: Request) {
     const targetType = type || "video";
     const targetMode = mode || "ideas";
 
-    const allPosts = getCustomUserPosts(uid);
+    const allPosts = await getCustomUserPosts(uid);
     // Find top posts for this platform to provide as context
     const topPosts = allPosts
       .filter(p => p.platform === targetPlatform)

@@ -16,7 +16,87 @@ export async function POST(request: Request) {
 
     // 2. Parse Request Body
     const body = await request.json();
-    const { caption, imageUrl, videoUrl } = body;
+    let { caption, imageUrl, videoUrl, creationId } = body;
+
+    // 3. Retrieve Tokens and Connection Data
+    const secrets = await getUserConnectionSecrets(uid, "instagram");
+    const accessToken = typeof secrets?.accessToken === "string" ? secrets.accessToken : "";
+    
+    const connections = await getUserConnections(uid);
+    const instagramConnection = connections.instagram;
+    const instagramAccountId = instagramConnection?.accountId;
+
+    if (!accessToken || accessToken === "mock-access-token" || secrets?.mockConnection === true || !instagramAccountId) {
+      return NextResponse.json(
+        { error: "Instagram account is not connected with a live OAuth token. Please go to Connect -> Connect Instagram to authorize live publishing to your Instagram handle." },
+        { status: 400 }
+      );
+    }
+
+    // ── Check creationId directly (polled from client side to avoid Vercel freezing) ──
+    if (creationId) {
+      // 1. Try to get status
+      const statusRes = await fetch(
+        `https://graph.instagram.com/v20.0/${creationId}?fields=status_code&access_token=${accessToken}`
+      );
+      
+      if (!statusRes.ok) {
+        const errTxt = await statusRes.text();
+        return NextResponse.json({ error: `Failed to check Reel status: ${errTxt}` }, { status: 400 });
+      }
+      
+      const statusData = await statusRes.json();
+      if (statusData.status_code === "IN_PROGRESS") {
+        return NextResponse.json({ success: true, isReady: false, creationId });
+      } else if (statusData.status_code === "ERROR" || statusData.status_code === "EXPIRED") {
+        return NextResponse.json({ error: "Instagram failed to process the media file." }, { status: 400 });
+      } else if (statusData.status_code === "FINISHED") {
+        const publishEndpoint = `https://graph.instagram.com/v20.0/${instagramAccountId}/media_publish`;
+        const publishRes = await fetch(publishEndpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            creation_id: creationId,
+            access_token: accessToken,
+          }),
+        });
+
+        const publishData = await publishRes.json();
+
+        if (publishRes.ok) {
+          const platformPostId = publishData.id;
+          const postUrl = `https://instagram.com/p/${platformPostId}`;
+
+          const postObj = {
+            id: `ig-live-${platformPostId}`,
+            platform: "instagram" as const,
+            title: caption || "Instagram Post",
+            description: caption || "",
+            url: postUrl,
+            type: "video" as const,
+            status: "active" as const,
+            privacyStatus: "public",
+            category: "Social",
+            thumbnailUrl: imageUrl || "",
+            metrics: { likes: 0, comments: 0, shares: 0, views: 0, saves: 0, followerCount: 0 },
+            uesScore: 78,
+            publishedAt: new Date().toISOString().slice(0, 10),
+            _addedAt: Date.now(),
+          };
+
+          return NextResponse.json({
+            success: true,
+            isReady: true,
+            mediaId: platformPostId,
+            url: postUrl,
+            post: postObj,
+          });
+        } else {
+          const errorMsg = publishData.error?.message || "Failed to publish Reel.";
+          return NextResponse.json({ error: errorMsg }, { status: 400 });
+        }
+      }
+    }
 
     const mediaUrl = imageUrl || videoUrl;
     const mediaType = videoUrl ? "video" : "image";
@@ -31,21 +111,6 @@ export async function POST(request: Request) {
     if (!mediaUrl.startsWith("https://")) {
       return NextResponse.json(
         { error: "Media URL must be publicly accessible over HTTPS." },
-        { status: 400 }
-      );
-    }
-
-    // 3. Retrieve Tokens and Connection Data
-    const secrets = await getUserConnectionSecrets(uid, "instagram");
-    const accessToken = typeof secrets?.accessToken === "string" ? secrets.accessToken : "";
-    
-    const connections = await getUserConnections(uid);
-    const instagramConnection = connections.instagram;
-    const instagramAccountId = instagramConnection?.accountId;
-
-    if (!accessToken || accessToken === "mock-access-token" || secrets?.mockConnection === true || !instagramAccountId) {
-      return NextResponse.json(
-        { error: "Instagram account is not connected with a live OAuth token. Please go to Connect -> Connect Instagram to authorize live publishing to your Instagram handle." },
         { status: 400 }
       );
     }
@@ -153,15 +218,24 @@ export async function POST(request: Request) {
     }
 
     console.log('createData:', createData);
-    const creationId = createData.id;
+    creationId = createData.id;
     if (!creationId) throw new Error('creationId is undefined. createData: ' + JSON.stringify(createData));
 
-    // Helper to poll and publish
+    // For videos, return immediately. Client-side will poll to complete processing and publish.
+    if (mediaType === "video") {
+      return NextResponse.json({
+        success: true,
+        isReady: false,
+        creationId,
+      });
+    }
+
+    // Helper to poll and publish (only used for images since they complete instantly)
     const pollAndPublish = async () => {
       let isReady = false;
       let attempts = 0;
-      const maxAttempts = 24; // 2 minutes max
-      const delayMs = 5000;
+      const maxAttempts = 3;
+      const delayMs = 1500;
 
       while (!isReady && attempts < maxAttempts) {
         if (attempts > 0) {
@@ -181,8 +255,6 @@ export async function POST(request: Request) {
             throw new Error("Instagram failed to process the media file.");
           }
         } else {
-          // If status check fails, we assume it's an image that doesn't support status_code,
-          // so we'll just try to publish it directly.
           isReady = true;
         }
 
@@ -209,7 +281,7 @@ export async function POST(request: Request) {
               title: caption ? caption.slice(0, 120) : "Instagram Post",
               description: caption || "",
               url: postUrl,
-              type: mediaType === "video" ? ("video" as const) : ("photo" as const),
+              type: "photo" as const,
               status: "active" as const,
               privacyStatus: "public",
               category: "Social",
@@ -220,65 +292,20 @@ export async function POST(request: Request) {
               _addedAt: Date.now(),
             };
 
-            // Real published post is fetched via API on sync, do not save local duplicate
-            // await saveCustomUserPost(uid, postObj);
             return { platformPostId, postUrl, postObj };
           } else {
             const errorMsg = publishData.error?.message || "";
-            // If Instagram says it's not available yet, it means processing isn't actually done
             if (errorMsg.includes("Media ID is not available") || errorMsg.includes("not ready")) {
-              console.log("Instagram says Media ID is not available yet. Waiting...");
-              isReady = false; // Reset to false and let the loop continue
+              isReady = false;
             } else {
               throw new Error(errorMsg || "Failed to publish media to Instagram.");
             }
           }
         }
-        
         attempts++;
       }
-
       throw new Error("Instagram is taking too long to process the media (Timeout).");
     };
-
-    // For videos, return immediately and process in background
-    if (mediaType === "video") {
-      pollAndPublish()
-        .then(() => console.log("Instagram Video Published successfully in background."))
-        .catch(err => console.error("Instagram Background Publish Error:", err));
-
-      const processingPost = {
-        id: `ig-live-processing-${Date.now()}`,
-        platform: "instagram" as const,
-        title: caption ? caption.slice(0, 120) : "Instagram Reel (Processing)",
-        description: caption || "",
-        url: "#",
-        type: "video" as const,
-        status: "active" as const,
-        privacyStatus: "public",
-        category: "Social",
-        thumbnailUrl: mediaUrl,
-        metrics: { likes: 0, comments: 0, shares: 0, views: 0, saves: 0, followerCount: 0 },
-        uesScore: 0,
-        publishedAt: new Date().toISOString().slice(0, 10),
-        _addedAt: Date.now(),
-      };
-
-      try {
-        // Real published post is fetched via API on sync, do not save local duplicate
-        // await saveCustomUserPost(uid, processingPost);
-      } catch (e) {
-        console.warn("Failed to save processing post to Firebase:", e);
-      }
-
-      return NextResponse.json({
-        success: true,
-        message: "✓ Video is being processed and published by Instagram in the background!",
-        mediaId: "processing",
-        url: "#",
-        post: processingPost,
-      });
-    }
 
     // For images, process synchronously
     const { platformPostId, postUrl, postObj } = await pollAndPublish();

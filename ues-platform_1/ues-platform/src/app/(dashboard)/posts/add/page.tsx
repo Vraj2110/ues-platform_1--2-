@@ -289,29 +289,21 @@ export default function AddPostPage() {
           mediaType = videoFile ? "video" : "image";
           setUploadProgress(20);
 
-          if (platform === "facebook") {
-            // Facebook: send file directly as multipart to our server (server → FB Graph API)
-            // No CDN upload needed — avoids Facebook rejecting tmpfiles.org URLs
-            mediaUrl = undefined; // will be sent as raw file in FormData below
+          try {
+            const formData = new FormData();
+            formData.append("file", fileToUpload as File);
+            const fallbackRes = await fetch("https://tmpfiles.org/api/v1/upload", {
+              method: "POST",
+              body: formData,
+            });
+            if (!fallbackRes.ok) throw new Error("Temporary storage upload failed");
+            const fallbackData = await fallbackRes.json();
+            // Convert to direct download link required by Meta Graph API
+            mediaUrl = fallbackData.data.url.replace("tmpfiles.org/", "tmpfiles.org/dl/");
             setUploadProgress(70);
-          } else {
-            // Instagram / other: upload to tmpfiles.org to get a public URL
-            try {
-              const formData = new FormData();
-              formData.append("file", fileToUpload as File);
-              const fallbackRes = await fetch("https://tmpfiles.org/api/v1/upload", {
-                method: "POST",
-                body: formData,
-              });
-              if (!fallbackRes.ok) throw new Error("Temporary storage upload failed");
-              const fallbackData = await fallbackRes.json();
-              // Convert to direct download link required by Instagram
-              mediaUrl = fallbackData.data.url.replace("tmpfiles.org/", "tmpfiles.org/dl/");
-              setUploadProgress(70);
-            } catch (err: any) {
-              console.error("Upload Error:", err);
-              throw new Error("Failed to upload media. Details: " + (err.message || err));
-            }
+          } catch (err: any) {
+            console.error("Upload Error:", err);
+            throw new Error("Failed to upload media. Details: " + (err.message || err));
           }
 
           setUploadProgress(75);
@@ -336,30 +328,6 @@ export default function AddPostPage() {
           videoUrl: mediaType === "video" ? mediaUrl : undefined,
           connectionId: "instagram",
         });
-      } else if (isYouTube && videoFile) {
-        const formData = new FormData();
-        formData.append("platform", platform);
-        formData.append("type", type);
-        formData.append("title", title);
-        formData.append("description", description);
-        formData.append("privacyStatus", privacyStatus);
-        formData.append("category", category);
-        formData.append("tags", tags);
-        formData.append("publishedAt", publishedAt);
-        formData.append("videoFile", videoFile);
-        if (thumbnailPreviewUrl) formData.append("thumbnailUrl", thumbnailPreviewUrl);
-        reqBody = formData;
-      } else if (platform === "facebook" && (videoFile || thumbnailFile)) {
-        // Send file directly as multipart — server relays binary to Facebook Graph API
-        const fileToUpload = videoFile || thumbnailFile!;
-        const formData = new FormData();
-        formData.append("platform", "facebook");
-        formData.append("title", title);
-        formData.append("description", description);
-        formData.append("publishedAt", publishedAt);
-        formData.append("mediaType", videoFile ? "video" : "image");
-        formData.append("videoFile", fileToUpload);  // "videoFile" field is parsed for all platforms
-        reqBody = formData;
       } else {
         headers["Content-Type"] = "application/json";
         reqBody = JSON.stringify({
@@ -399,7 +367,46 @@ export default function AddPostPage() {
         throw new Error(errMsg);
       }
 
-      const data = await res.json();
+      let data = await res.json();
+
+      // Instagram asynchronous Reel/Video polling loop
+      if (platform === "instagram" && data.isReady === false && data.creationId) {
+        let attempts = 0;
+        const maxAttempts = 30; // 60 seconds max
+        const delayMs = 2000;
+        let success = false;
+
+        while (!success && attempts < maxAttempts) {
+          attempts++;
+          setError(`Instagram is processing your video. Please wait... (${attempts}/${maxAttempts})`);
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+
+          const pollRes = await fetch(endpoint, {
+            method: "POST",
+            headers: {
+              ...headers,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ creationId: data.creationId }),
+          });
+
+          if (!pollRes.ok) {
+            const pollErr = await pollRes.json();
+            throw new Error(pollErr.error || "Failed to check Instagram video status.");
+          }
+
+          const pollData = await pollRes.json();
+          if (pollData.isReady) {
+            data = pollData;
+            success = true;
+            setError(null);
+          }
+        }
+
+        if (!success) {
+          throw new Error("Instagram is taking too long to process your video. Please check your Instagram app in a few minutes.");
+        }
+      }
 
       // Fallback YouTube client resumable upload if server returned resumableUrl without full direct upload
       if (data.resumableUrl && videoFile && data.videoId?.startsWith("yt-")) {
