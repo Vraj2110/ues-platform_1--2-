@@ -273,7 +273,9 @@ export async function GET(request: Request) {
                       engagementRate,
                     },
                     uesScore: score,
-                    publishedAt: item.publishedAt || new Date().toISOString(),
+                    publishedAt: item.publishedAt
+                      ? new Date(item.publishedAt).toISOString().slice(0, 10)
+                      : new Date().toISOString().slice(0, 10),
                   });
                 });
               }

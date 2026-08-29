@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { resolveOAuthState } from "@/lib/server/oauth";
 
-function buildGoogleRedirectUri(request: Request) {
-  if (process.env.GOOGLE_REDIRECT_URI) {
-    return process.env.GOOGLE_REDIRECT_URI;
+function buildRedirectUri(request: Request, envKey?: string) {
+  if (envKey && process.env[envKey]) {
+    return process.env[envKey]!;
   }
   return new URL(`/api/connections/oauth-callback`, new URL(request.url).origin).toString();
 }
@@ -129,7 +129,7 @@ export async function GET(request: Request) {
       let tokenResponse: any = null;
 
       try {
-        tokenResponse = await exchangeGoogleCode(code, buildGoogleRedirectUri(request));
+        tokenResponse = await exchangeGoogleCode(code, buildRedirectUri(request, "GOOGLE_REDIRECT_URI"));
         accessToken = tokenResponse.access_token || accessToken;
         refreshToken = tokenResponse.refresh_token || refreshToken;
       } catch (tokenErr) {
@@ -174,7 +174,7 @@ export async function GET(request: Request) {
         console.warn("YouTube analytics fetch info:", analyticsError);
       }
     } else if (platform === "instagram") {
-      const tokenResponse = await exchangeInstagramCode(code);
+      const tokenResponse = await exchangeInstagramCode(code, buildRedirectUri(request, "INSTAGRAM_REDIRECT_URI"));
       const accessToken = tokenResponse.access_token;
       const refreshToken = tokenResponse.refresh_token;
       const profile = await fetchInstagramProfile(accessToken);
@@ -191,7 +191,7 @@ export async function GET(request: Request) {
         createdAt: new Date().toISOString(),
       });
     } else if (platform === "facebook") {
-      const tokenResponse = await exchangeFacebookCode(code);
+      const tokenResponse = await exchangeFacebookCode(code, buildRedirectUri(request, "FACEBOOK_REDIRECT_URI"));
       const accessToken = tokenResponse.access_token;
       const refreshToken = tokenResponse.refresh_token; // may be absent
       const profile = await fetchFacebookProfile(accessToken);
@@ -205,7 +205,7 @@ export async function GET(request: Request) {
         createdAt: new Date().toISOString(),
       });
     } else if (platform === "threads") {
-      const tokenResponse = await exchangeThreadsCode(code);
+      const tokenResponse = await exchangeThreadsCode(code, buildRedirectUri(request, "THREADS_REDIRECT_URI"));
       const accessToken = tokenResponse.access_token;
       const refreshToken = tokenResponse.refresh_token; // may be absent
       const profile = await fetchThreadsProfile(accessToken);
@@ -220,7 +220,7 @@ export async function GET(request: Request) {
       });
     } else if (platform === "x") {
       if (!record.codeVerifier) throw new Error("Missing PKCE code verifier in session state");
-      const tokenResponse = await exchangeTwitterCode(code, record.codeVerifier);
+      const tokenResponse = await exchangeTwitterCode(code, record.codeVerifier, buildRedirectUri(request, "TWITTER_REDIRECT_URI"));
       const accessToken = tokenResponse.access_token;
       const refreshToken = tokenResponse.refresh_token; // usually present if offline.access was requested
       const profile = await fetchTwitterProfile(accessToken);
