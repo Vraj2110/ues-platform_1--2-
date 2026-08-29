@@ -221,6 +221,22 @@ export default function ContentPage() {
                 </Badge>
               ))}
             </div>
+            {Object.entries(syncReport.platformResults || {}).some(([_, res]: [any, any]) => res.status === "failed" || res.status === "auth_required") && (
+              <div className="mt-3 text-xs text-pink-ues/90 border border-pink-ues/10 bg-pink-ues/[0.02] p-3 rounded-xl space-y-1">
+                <div className="font-semibold text-pink-400">Sync Errors:</div>
+                {Object.entries(syncReport.platformResults || {}).map(([plat, res]: [string, any]) => {
+                  if (res.status === "failed" || res.status === "auth_required") {
+                    return (
+                      <div key={plat} className="flex gap-1.5 items-start">
+                        <span className="capitalize font-medium text-pink-300">{plat}:</span>
+                        <span>{res.errorMessage || "Unknown connection error."}</span>
+                      </div>
+                    );
+                  }
+                  return null;
+                })}
+              </div>
+            )}
           </div>
         )}
 

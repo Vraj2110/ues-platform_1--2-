@@ -153,6 +153,7 @@ export async function publishToFacebook(
     let targetId = "me";
 
     // Try to get a Page token — required for posting to Pages
+    let hasPages = false;
     try {
       const pagesResponse = await fetch(`https://graph.facebook.com/v19.0/me/accounts?access_token=${accessToken}`);
       if (pagesResponse.ok) {
@@ -160,10 +161,18 @@ export async function publishToFacebook(
         if (Array.isArray(pagesData.data) && pagesData.data.length > 0) {
           pageToken = pagesData.data[0].access_token || accessToken;
           targetId = pagesData.data[0].id;
+          hasPages = true;
         }
+      } else {
+        const txt = await pagesResponse.text();
+        return { success: false, error: `Facebook API error: Failed to fetch accounts. Details: ${txt}` };
       }
-    } catch {
-      // Fall through to user token on "me"
+    } catch (err: any) {
+      return { success: false, error: `Facebook Connection error: ${err.message}` };
+    }
+
+    if (!hasPages) {
+      return { success: false, error: "No connected Facebook Pages found. You must own a Facebook Page and grant permissions for it during the connection flow." };
     }
 
     let endpoint: string;
