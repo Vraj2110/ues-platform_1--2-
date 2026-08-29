@@ -6,14 +6,6 @@ export const dynamic = "force-dynamic";
 
 function buildRedirectUri(request: Request, platformId: string) {
   const requestUrl = new URL(request.url);
-  const isLocalhost = requestUrl.hostname === "localhost" || requestUrl.hostname === "127.0.0.1";
-
-  // On production (Vercel), always derive the redirect URI from the actual request origin
-  // so it matches what Facebook/Instagram/etc. receive. Env vars point to localhost and break on Vercel.
-  if (!isLocalhost) {
-    return new URL(`/api/connections/oauth-callback`, requestUrl.origin).toString();
-  }
-
   const envKey = platformId === "youtube" || platformId === "google" 
     ? "GOOGLE_REDIRECT_URI" 
     : platformId === "x" ? "TWITTER_REDIRECT_URI" 

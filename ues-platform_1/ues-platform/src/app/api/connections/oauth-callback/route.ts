@@ -2,24 +2,10 @@ import { NextResponse } from "next/server";
 import { resolveOAuthState } from "@/lib/server/oauth";
 
 function buildGoogleRedirectUri(request: Request) {
-  const reqUrl = new URL(request.url);
-  const isLocalhost = reqUrl.hostname === "localhost" || reqUrl.hostname === "127.0.0.1";
-  if (!isLocalhost) {
-    return new URL(`/api/connections/oauth-callback`, reqUrl.origin).toString();
-  }
   if (process.env.GOOGLE_REDIRECT_URI) {
     return process.env.GOOGLE_REDIRECT_URI;
   }
-  return new URL(`/api/connections/oauth-callback`, reqUrl.origin).toString();
-}
-
-function buildCallbackRedirectUri(request: Request): string {
-  const reqUrl = new URL(request.url);
-  const isLocalhost = reqUrl.hostname === "localhost" || reqUrl.hostname === "127.0.0.1";
-  if (!isLocalhost) {
-    return new URL(`/api/connections/oauth-callback`, reqUrl.origin).toString();
-  }
-  return new URL(`/api/connections/oauth-callback`, reqUrl.origin).toString();
+  return new URL(`/api/connections/oauth-callback`, new URL(request.url).origin).toString();
 }
 import {
   exchangeGoogleCode,
@@ -111,8 +97,8 @@ export async function GET(request: Request) {
   const error = params.get("error");
 
   const reqUrl = new URL(request.url);
-  const isLocalhost = reqUrl.hostname === "localhost" || reqUrl.hostname === "127.0.0.1";
-  const origin = isLocalhost ? `http://${reqUrl.host.replace(":3001", ":3000")}` : reqUrl.origin;
+  const host = reqUrl.host.replace(":3001", ":3000");
+  const origin = `http://${host}`;
   if (error) {
     const redirectUrl = new URL(`/connect`, origin);
     redirectUrl.searchParams.set("error", error);
@@ -188,8 +174,7 @@ export async function GET(request: Request) {
         console.warn("YouTube analytics fetch info:", analyticsError);
       }
     } else if (platform === "instagram") {
-      const callbackUri = buildCallbackRedirectUri(request);
-      const tokenResponse = await exchangeInstagramCode(code, callbackUri);
+      const tokenResponse = await exchangeInstagramCode(code);
       const accessToken = tokenResponse.access_token;
       const refreshToken = tokenResponse.refresh_token;
       const profile = await fetchInstagramProfile(accessToken);
@@ -206,8 +191,7 @@ export async function GET(request: Request) {
         createdAt: new Date().toISOString(),
       });
     } else if (platform === "facebook") {
-      const callbackUri = buildCallbackRedirectUri(request);
-      const tokenResponse = await exchangeFacebookCode(code, callbackUri);
+      const tokenResponse = await exchangeFacebookCode(code);
       const accessToken = tokenResponse.access_token;
       const refreshToken = tokenResponse.refresh_token; // may be absent
       const profile = await fetchFacebookProfile(accessToken);
@@ -221,8 +205,7 @@ export async function GET(request: Request) {
         createdAt: new Date().toISOString(),
       });
     } else if (platform === "threads") {
-      const callbackUri = buildCallbackRedirectUri(request);
-      const tokenResponse = await exchangeThreadsCode(code, callbackUri);
+      const tokenResponse = await exchangeThreadsCode(code);
       const accessToken = tokenResponse.access_token;
       const refreshToken = tokenResponse.refresh_token; // may be absent
       const profile = await fetchThreadsProfile(accessToken);
@@ -237,8 +220,7 @@ export async function GET(request: Request) {
       });
     } else if (platform === "x") {
       if (!record.codeVerifier) throw new Error("Missing PKCE code verifier in session state");
-      const callbackUri = buildCallbackRedirectUri(request);
-      const tokenResponse = await exchangeTwitterCode(code, record.codeVerifier, callbackUri);
+      const tokenResponse = await exchangeTwitterCode(code, record.codeVerifier);
       const accessToken = tokenResponse.access_token;
       const refreshToken = tokenResponse.refresh_token; // usually present if offline.access was requested
       const profile = await fetchTwitterProfile(accessToken);
