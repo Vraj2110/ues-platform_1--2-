@@ -26,13 +26,32 @@ export function useRealTimePosts() {
   const [platformErrors, setPlatformErrors] = useState<string[]>(cachedPlatformErrors);
 
   const fetchData = useCallback(async (user: any) => {
+    if (!user) {
+      // Clear cache and local state on logout/unauthenticated
+      cachedYoutubeConnected = false;
+      cachedConnectedPlatforms = new Set();
+      cachedCheckingYoutubeConnection = false;
+      cachedLiveYoutubePosts = [];
+      cachedLivePlatformPosts = [];
+      cachedCustomPosts = [];
+      cachedPlatformErrors = [];
+      hasFetchedPostsOnce = false;
+
+      setYoutubeConnected(false);
+      setConnectedPlatforms(new Set());
+      setLiveYoutubePosts([]);
+      setLivePlatformPosts([]);
+      setCustomPosts([]);
+      setPlatformErrors([]);
+      setCheckingYoutubeConnection(false);
+      return;
+    }
+
     try {
       let token = "";
-      if (user) {
-        try {
-          token = await user.getIdToken();
-        } catch {}
-      }
+      try {
+        token = await user.getIdToken();
+      } catch {}
 
       const headers: Record<string, string> = token ? { authorization: `Bearer ${token}` } : {};
 
@@ -236,11 +255,9 @@ export function useRealTimePosts() {
       } catch {}
     }
 
-    fetchData(auth.currentUser);
-
     // Listen for custom refresh events triggered after publishing
     const handleRefreshEvent = () => {
-      if (active) fetchData(auth.currentUser);
+      if (active && auth.currentUser) fetchData(auth.currentUser);
     };
     if (typeof window !== "undefined") {
       window.addEventListener("ues-refresh-posts", handleRefreshEvent);
@@ -253,7 +270,7 @@ export function useRealTimePosts() {
 
     // Poll every 10 seconds for real-time visibility across all platforms
     pollInterval = setInterval(() => {
-      if (active) fetchData(auth.currentUser);
+      if (active && auth.currentUser) fetchData(auth.currentUser);
     }, 10000);
 
     return () => {
