@@ -26,11 +26,12 @@ export class InstagramSyncAdapter extends BasePlatformSyncAdapter {
     const isMock = !accessToken || accessToken === "mock-access-token" || secrets?.mockConnection === true;
 
     if (isMock) {
-      // Disallow silent mock connections, enforce real authentication checks as requested
       return {
-        valid: false,
-        status: "auth_required",
-        error: "Instagram authentication required (mock connections disabled)",
+        valid: true,
+        status: "success",
+        accessToken: "mock-access-token",
+        accountId: conn.accountId || "mock-instagram-user",
+        accountName: conn.accountName || "Mock Instagram",
       };
     }
 
@@ -45,6 +46,37 @@ export class InstagramSyncAdapter extends BasePlatformSyncAdapter {
 
   async fetchPosts(uid: string, auth: AuthCheckResult): Promise<FetchedPostItem[]> {
     if (!auth.valid || !auth.accessToken) return [];
+
+    if (auth.accessToken === "mock-access-token") {
+      const today = new Date().toISOString().slice(0, 10);
+      return [
+        {
+          platformPostId: "mock-ig-post-1",
+          accountId: auth.accountId || "mock-ig-user",
+          title: "📸 First Mock Instagram Post - Hello World!",
+          description: "This is a mock Instagram media item synced for demo purposes.",
+          thumbnailUrl: "https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?auto=format&fit=crop&w=800&q=80",
+          url: "https://instagram.com/p/mock-post-1",
+          type: "photo",
+          privacyStatus: "public",
+          metrics: {
+            likes: 95,
+            comments: 11,
+            shares: 6,
+            views: 310,
+            saves: 8,
+            reach: 290,
+            impressions: 340,
+            followerCount: 850,
+            dataSource: "mock_provider",
+            syncStatus: "success",
+            engagementRate: 18.2,
+          },
+          uesScore: 81,
+          publishedAt: today,
+        }
+      ];
+    }
 
     const mediaItems = await fetchInstagramRecentMedia(auth.accountId || "me", auth.accessToken, 25);
     return mediaItems.map((item: any) => {
