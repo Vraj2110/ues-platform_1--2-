@@ -210,26 +210,26 @@ export default function ContentPage() {
               {Object.entries(syncReport.platformResults || {}).map(([plat, res]: [string, any]) => (
                 <Badge
                   key={plat}
-                  variant={res.status === "success" ? "cyan" : "pink"}
+                  variant={res?.status === "success" ? "cyan" : "pink"}
                   className="text-xs flex items-center gap-1.5 px-3 py-1"
                 >
                   <span className="capitalize">{plat}</span>
-                  <span>{res.status === "success" ? "✓" : "✗"}</span>
-                  {res.status === "success" && (
-                    <span className="text-[10px] opacity-80">({res.checkedCount} posts)</span>
+                  <span>{res?.status === "success" ? "✓" : "✗"}</span>
+                  {res?.status === "success" && (
+                    <span className="text-[10px] opacity-80">({res?.checkedCount} posts)</span>
                   )}
                 </Badge>
               ))}
             </div>
-            {Object.entries(syncReport.platformResults || {}).some(([_, res]: [any, any]) => res.status === "failed" || res.status === "auth_required") && (
+            {Object.entries(syncReport.platformResults || {}).some(([_, res]: [any, any]) => res?.status === "failed" || res?.status === "auth_required") && (
               <div className="mt-3 text-xs text-pink-ues/90 border border-pink-ues/10 bg-pink-ues/[0.02] p-3 rounded-xl space-y-1">
                 <div className="font-semibold text-pink-400">Sync Errors:</div>
                 {Object.entries(syncReport.platformResults || {}).map(([plat, res]: [string, any]) => {
-                  if (res.status === "failed" || res.status === "auth_required") {
+                  if (res?.status === "failed" || res?.status === "auth_required") {
                     return (
                       <div key={plat} className="flex gap-1.5 items-start">
                         <span className="capitalize font-medium text-pink-300">{plat}:</span>
-                        <span>{res.errorMessage || "Unknown connection error."}</span>
+                        <span>{res?.errorMessage || "Unknown connection error."}</span>
                       </div>
                     );
                   }
