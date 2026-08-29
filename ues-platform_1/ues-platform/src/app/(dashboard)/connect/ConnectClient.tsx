@@ -85,7 +85,11 @@ export default function ConnectClient({ platforms }: { platforms: Platform[] }) 
           loadConnections(u);
         } else {
           setLoadingConnections(false);
-          setConnections({});
+          // Prevent transient cache clearing during initialization if connections are cached in localStorage.
+          const hasCached = typeof window !== "undefined" && localStorage.getItem("ues_connections");
+          if (!hasCached) {
+            setConnections({});
+          }
           setHasLoadedConnections(true);
         }
       });
@@ -262,7 +266,8 @@ export default function ConnectClient({ platforms }: { platforms: Platform[] }) 
             !!connections[platform.id]?.connected ||
             (successConnected && justConnectedPlatform === platform.id);
           const connection = connections[platform.id];
-          const isLoading = loadingConnections || !!loadingPlatform[platform.id];
+          const isConnectingThis = !!loadingPlatform[platform.id];
+          const isActionDisabled = loadingConnections || isConnectingThis || !user;
           return (
             <Card
               key={platform.id}
@@ -292,7 +297,7 @@ export default function ConnectClient({ platforms }: { platforms: Platform[] }) 
                   <button
                     onClick={() => handleDisconnect(platform.id)}
                     className="text-xs text-mint-700 hover:text-pink-ues transition w-full text-center py-1 cursor-pointer"
-                    disabled={isLoading}
+                    disabled={isActionDisabled}
                   >
                     Disconnect channel
                   </button>
@@ -301,9 +306,9 @@ export default function ConnectClient({ platforms }: { platforms: Platform[] }) 
                 <button
                   onClick={() => handleStart(platform.id)}
                   className="btn w-full"
-                  disabled={!user || isLoading}
+                  disabled={isActionDisabled}
                 >
-                  {isLoading ? "Connecting..." : user ? "Connect →" : "Sign in to connect"}
+                  {isConnectingThis ? "Connecting..." : user ? "Connect →" : "Sign in to connect"}
                 </button>
               )}
             </Card>
