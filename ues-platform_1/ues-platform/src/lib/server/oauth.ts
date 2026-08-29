@@ -689,16 +689,26 @@ export async function fetchFacebookRecentPosts(accessToken: string, limit = 20) 
     { cache: "no-store" }
   );
   
-  let pages: any[] = [{ id: "me", access_token: accessToken, followers_count: 0, fan_count: 0 }];
+  if (!pagesRes.ok) {
+    let errMsg = `Status ${pagesRes.status}`;
+    try {
+      const errJson = await pagesRes.json();
+      if (errJson?.error?.message) {
+        errMsg = errJson.error.message;
+      }
+    } catch {}
+    throw new Error(`Failed to fetch Facebook Pages: ${errMsg}`);
+  }
 
-  if (pagesRes.ok) {
-    const pagesData = await pagesRes.json();
-    if (Array.isArray(pagesData?.data) && pagesData.data.length > 0) {
-      pages = pagesData.data; // use all pages available
-    }
+  const pagesData = await pagesRes.json();
+  const pages = pagesData?.data || [];
+
+  if (pages.length === 0) {
+    throw new Error("No connected Facebook Pages found. Make sure you own a Page and granted permissions for it during connection.");
   }
 
   const allItems: any[] = [];
+  let pageErrors = 0;
 
   for (const page of pages) {
     const fieldsWithInsights = "id,message,story,full_picture,created_time,reactions.summary(total_count),comments.summary(total_count),shares,insights";
@@ -726,37 +736,25 @@ export async function fetchFacebookRecentPosts(accessToken: string, limit = 20) 
 
     if (postsRes.ok) {
       const data = await postsRes.json();
-      if (Array.isArray(data?.data) && data.data.length > 0) {
+      if (Array.isArray(data?.data)) {
         const postsWithFollowers = data.data.map((p: any) => ({ ...p, followerCount: page.followers_count || page.fan_count || 0 }));
         allItems.push(...postsWithFollowers);
-        continue;
       }
     } else {
+      pageErrors++;
       const finalErr = await postsRes.text();
       console.error(`[Facebook API] Direct posts fetch failed completely for page ${page.id}. Status: ${postsRes.status}. Error:`, finalErr);
     }
-    
-    // Fallback: If posts endpoint fails or is empty, try the feed endpoint
-    if (page.id === "me" || page.id === "me/") {
-      const feedRes = await fetch(`https://graph.facebook.com/v19.0/me/feed?${params.toString()}`, { cache: "no-store" });
-      if (feedRes.ok) {
-        const feedData = await feedRes.json();
-        if (Array.isArray(feedData?.data)) {
-          const feedWithFollowers = feedData.data.map((p: any) => ({ ...p, followerCount: page.followers_count || page.fan_count || 0 }));
-          allItems.push(...feedWithFollowers);
-        }
-      } else {
-        console.warn(`[Facebook] Failed to fetch personal feed: ${feedRes.status}`);
-      }
-    }
+  }
+
+  if (pages.length > 0 && pageErrors === pages.length) {
+    throw new Error("Failed to fetch posts from any of your connected Facebook Pages. Please check Page permissions.");
   }
 
   return allItems.map((item: any) => {
     let reach: number | null = null;
     let impressions: number | null = null;
     
-    console.log(`[Facebook Sync Debug] Raw post:`, JSON.stringify({ id: item.id, message: item.message?.slice(0, 30), insights: item.insights }));
-
     if (Array.isArray(item.insights?.data)) {
       item.insights.data.forEach((entry: any) => {
         const val = entry.values?.[0]?.value ?? entry.value;
@@ -766,8 +764,6 @@ export async function fetchFacebookRecentPosts(accessToken: string, limit = 20) 
     }
     const views = impressions ?? reach ?? 0;
     
-    console.log(`[Facebook Sync Debug] Parsed post ID: ${item.id} -> views (impressions/reach): ${views}`);
-
     return {
       id: item.id,
       message: item.message || item.story || "",
