@@ -6,14 +6,24 @@ import { POSTS } from "@/lib/data";
 import { calculateUnifiedEngagement } from "@/lib/server/uesService";
 import type { Post } from "@/types";
 
+// Client-side cache to persist state across page navigation
+let cachedYoutubeConnected = false;
+let cachedConnectedPlatforms = new Set<string>();
+let cachedCheckingYoutubeConnection = true;
+let cachedLiveYoutubePosts: Post[] = [];
+let cachedLivePlatformPosts: Post[] = [];
+let cachedCustomPosts: Post[] = [];
+let cachedPlatformErrors: string[] = [];
+let hasFetchedPostsOnce = false;
+
 export function useRealTimePosts() {
-  const [youtubeConnected, setYoutubeConnected] = useState(false);
-  const [connectedPlatforms, setConnectedPlatforms] = useState<Set<string>>(new Set());
-  const [checkingYoutubeConnection, setCheckingYoutubeConnection] = useState(true);
-  const [liveYoutubePosts, setLiveYoutubePosts] = useState<Post[]>([]);
-  const [livePlatformPosts, setLivePlatformPosts] = useState<Post[]>([]);
-  const [customPosts, setCustomPosts] = useState<Post[]>([]);
-  const [platformErrors, setPlatformErrors] = useState<string[]>([]);
+  const [youtubeConnected, setYoutubeConnected] = useState(cachedYoutubeConnected);
+  const [connectedPlatforms, setConnectedPlatforms] = useState<Set<string>>(cachedConnectedPlatforms);
+  const [checkingYoutubeConnection, setCheckingYoutubeConnection] = useState(hasFetchedPostsOnce ? false : cachedCheckingYoutubeConnection);
+  const [liveYoutubePosts, setLiveYoutubePosts] = useState<Post[]>(cachedLiveYoutubePosts);
+  const [livePlatformPosts, setLivePlatformPosts] = useState<Post[]>(cachedLivePlatformPosts);
+  const [customPosts, setCustomPosts] = useState<Post[]>(cachedCustomPosts);
+  const [platformErrors, setPlatformErrors] = useState<string[]>(cachedPlatformErrors);
 
   const fetchData = useCallback(async (user: any) => {
     try {
@@ -160,6 +170,16 @@ export function useRealTimePosts() {
       // customPosts from /api/posts/custom already reflects the authoritative synced state.
       // Do NOT sanitize against fetchedPlatformPosts (which is only a partial live sample).
       // The sync engine (POST /api/sync) is the single source of truth.
+
+      // Update global cache
+      cachedYoutubeConnected = ytConnected;
+      cachedConnectedPlatforms = activeSet;
+      cachedCheckingYoutubeConnection = false;
+      cachedLiveYoutubePosts = fetchedYoutubePosts;
+      cachedLivePlatformPosts = fetchedPlatformPosts;
+      cachedCustomPosts = customUserPosts;
+      cachedPlatformErrors = fetchedErrors;
+      hasFetchedPostsOnce = true;
 
       setYoutubeConnected(ytConnected);
       if (activeSet.size > 0) setConnectedPlatforms(activeSet);
@@ -365,6 +385,11 @@ export function useRealTimePosts() {
     setLivePlatformPosts((prev) => prev.filter((p) => p.id !== postId));
     setLiveYoutubePosts((prev) => prev.filter((p) => p.id !== postId));
     setCustomPosts((prev) => prev.filter((p) => p.id !== postId));
+
+    // Update global cache
+    cachedLivePlatformPosts = cachedLivePlatformPosts.filter((p) => p.id !== postId);
+    cachedLiveYoutubePosts = cachedLiveYoutubePosts.filter((p) => p.id !== postId);
+    cachedCustomPosts = cachedCustomPosts.filter((p) => p.id !== postId);
 
     if (typeof window !== "undefined") {
       try {

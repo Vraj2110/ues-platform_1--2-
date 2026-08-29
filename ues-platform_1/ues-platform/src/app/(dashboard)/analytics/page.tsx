@@ -21,17 +21,22 @@ import { auth } from "@/lib/firebase";
 
 const TABS = ["Overview", "AI Analysis", "Trends", "Comparison", "Benchmark"];
 
+// Client-side cache to persist analytics data across page navigation
+const globalAnalyticsCacheMap = new Map<number, any>();
+
 export default function AnalyticsPage() {
   const [activeTab, setActiveTab] = useState("Overview");
   const [daysFilter, setDaysFilter] = useState<number>(30);
-  const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<any>(() => globalAnalyticsCacheMap.get(30) || null);
+  const [loading, setLoading] = useState(() => !globalAnalyticsCacheMap.has(30));
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
     const fetchAnalytics = async () => {
-      setLoading(true);
+      if (!globalAnalyticsCacheMap.has(daysFilter)) {
+        setLoading(true);
+      }
       try {
         const user = auth.currentUser;
         let token = "";
@@ -47,6 +52,7 @@ export default function AnalyticsPage() {
         }
         const payload = await res.json();
         if (active) {
+          globalAnalyticsCacheMap.set(daysFilter, payload);
           setData(payload);
           setError(null);
         }
