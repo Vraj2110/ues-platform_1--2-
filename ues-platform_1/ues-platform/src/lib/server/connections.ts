@@ -65,6 +65,8 @@ function getMemorySecrets(uid: string) {
   return memoryStore.secrets[uid];
 }
 
+export let firestoreError: string | null = null;
+
 export async function getUserConnections(uid: string): Promise<Record<string, PlatformConnection>> {
   const fileConns = getMemoryConnections(uid);
   const demoConns = uid !== "demo-user" ? getMemoryConnections("demo-user") : {};
@@ -91,7 +93,8 @@ export async function getUserConnections(uid: string): Promise<Record<string, Pl
       result[doc.id] = doc.data() as PlatformConnection;
     });
     return { ...combinedMemory, ...result };
-  } catch (error) {
+  } catch (error: any) {
+    firestoreError = error?.message || String(error);
     console.warn("Falling back to persistent connection storage:", error);
     return combinedMemory;
   }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyIdToken, lastAuthError } from '@/lib/server/auth';
-import { getUserConnections } from '@/lib/server/connections';
+import { getUserConnections, firestoreError } from '@/lib/server/connections';
 import { firebaseInitError, isFirebaseAdminConfigured } from '@/lib/server/firebaseAdmin';
 
 export const dynamic = 'force-dynamic';
@@ -24,6 +24,9 @@ export async function GET(request: NextRequest) {
     }
     if (lastAuthError) {
       response.headers.set('x-firebase-auth-error', encodeURIComponent(lastAuthError));
+    }
+    if (firestoreError) {
+      response.headers.set('x-firestore-error', encodeURIComponent(firestoreError));
     }
     return response;
   } catch (error) {
