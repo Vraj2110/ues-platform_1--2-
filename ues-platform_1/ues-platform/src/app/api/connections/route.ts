@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyIdToken } from '@/lib/server/auth';
+import { verifyIdToken, lastAuthError } from '@/lib/server/auth';
 import { getUserConnections } from '@/lib/server/connections';
 import { firebaseInitError, isFirebaseAdminConfigured } from '@/lib/server/firebaseAdmin';
 
@@ -18,8 +18,12 @@ export async function GET(request: NextRequest) {
 
     const response = NextResponse.json(connections);
     response.headers.set('x-firebase-configured', String(isFirebaseAdminConfigured));
+    response.headers.set('x-firebase-uid', uid);
     if (firebaseInitError) {
       response.headers.set('x-firebase-error', encodeURIComponent(firebaseInitError));
+    }
+    if (lastAuthError) {
+      response.headers.set('x-firebase-auth-error', encodeURIComponent(lastAuthError));
     }
     return response;
   } catch (error) {
