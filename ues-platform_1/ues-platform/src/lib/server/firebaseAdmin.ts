@@ -22,6 +22,8 @@ function missingError() {
   );
 }
 
+export let firebaseInitError: string | null = null;
+
 let app: admin.app.App | null = null;
 if (projectId && clientEmail && privateKey) {
   try {
@@ -34,9 +36,16 @@ if (projectId && clientEmail && privateKey) {
           }),
         })
       : admin.app();
-  } catch (error) {
+  } catch (error: any) {
+    firebaseInitError = error?.message || String(error);
     console.warn("Firebase Admin initialization failed, falling back to proxy auth objects:", error);
   }
+} else {
+  const missing = [];
+  if (!projectId) missing.push("FIREBASE_PROJECT_ID");
+  if (!clientEmail) missing.push("FIREBASE_CLIENT_EMAIL");
+  if (!privateKey) missing.push("FIREBASE_PRIVATE_KEY");
+  firebaseInitError = `Missing keys in env: ${missing.join(", ")}`;
 }
 
 function makeMissingProxy(name: string) {
