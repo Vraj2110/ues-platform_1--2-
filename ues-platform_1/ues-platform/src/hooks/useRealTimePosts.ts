@@ -45,119 +45,142 @@ export function useRealTimePosts() {
       ]);
 
       // ── Connections ──────────────────────────────────────────────────────
-      let ytConnected = false;
-      const activeSet = new Set<string>();
+      let ytConnected = cachedYoutubeConnected;
+      let activeSet = new Set<string>(cachedConnectedPlatforms);
       if (connRes && connRes.ok) {
         const data = await connRes.json();
         ytConnected = Array.isArray(data) && data.some((c: any) => c.platformId === "youtube" && c.connected);
-        if (typeof window !== "undefined" && Array.isArray(data)) {
+        const newActiveSet = new Set<string>();
+        if (Array.isArray(data)) {
           const map: Record<string, any> = {};
           data.forEach((c: any) => {
             if (c?.platformId) {
               map[c.platformId] = c;
-              if (c.connected) activeSet.add(c.platformId);
+              if (c.connected) newActiveSet.add(c.platformId);
             }
           });
           localStorage.setItem("ues_connections", JSON.stringify(map));
         }
-      } else if (typeof window !== "undefined") {
+        activeSet = newActiveSet;
+      } else if (typeof window !== "undefined" && !hasFetchedPostsOnce) {
         const cachedConns = localStorage.getItem("ues_connections");
         if (cachedConns) {
           try {
             const parsed = JSON.parse(cachedConns);
             ytConnected = !!parsed?.youtube?.connected;
+            const newActiveSet = new Set<string>();
             Object.keys(parsed).forEach((k) => {
-              if (parsed[k]?.connected) activeSet.add(k);
+              if (parsed[k]?.connected) newActiveSet.add(k);
             });
+            activeSet = newActiveSet;
           } catch {}
         }
       }
 
       // ── YouTube live videos (strictly public only) ───────────────────────
-      let fetchedYoutubePosts: Post[] = [];
+      let fetchedYoutubePosts: Post[] = cachedLiveYoutubePosts;
       if (ytConnected) {
-        let videoItems: any[] = [];
         if (videosRes && videosRes.ok) {
           const videoData = await videosRes.json();
-          if (Array.isArray(videoData.videos) && videoData.videos.length > 0) {
-            videoItems = videoData.videos;
+          if (Array.isArray(videoData.videos)) {
+            const videoItems = videoData.videos;
+            let deletedIds = new Set<string>();
+            if (typeof window !== "undefined") {
+              try {
+                const cachedDeleted = localStorage.getItem("ues_deleted_posts");
+                if (cachedDeleted) {
+                  const parsed = JSON.parse(cachedDeleted);
+                  if (Array.isArray(parsed)) deletedIds = new Set(parsed);
+                }
+              } catch {}
+            }
+
+            fetchedYoutubePosts = videoItems
+              .filter((v: any) => !deletedIds.has(v.id))
+              .filter((v: any) => !v.privacyStatus || v.privacyStatus === "public")
+              .map((v: any, index: number) => {
+                const views = typeof v.views === "number" ? v.views : null;
+                const likes = typeof v.likes === "number" ? v.likes : null;
+                const comments = typeof v.comments === "number" ? v.comments : null;
+
+                const metricsData = {
+                  likes,
+                  comments,
+                  shares: null,
+                  views,
+                  saves: null,
+                  reach: null,
+                  impressions: null,
+                  followerCount: v.followerCount || null,
+                  dataSource: "youtube_api",
+                  syncStatus: "success" as const,
+                };
+
+                const { score, engagementRate } = calculateUnifiedEngagement(metricsData);
+
+                return {
+                  id: `yt-live-${v.id || index}`,
+                  platform: "youtube" as const,
+                  title: v.title || "YouTube Channel Video",
+                  thumbnailUrl: v.thumbnailUrl || undefined,
+                  url: v.id ? `https://www.youtube.com/watch?v=${v.id}` : undefined,
+                  type: "video" as const,
+                  status: "active" as const,
+                  privacyStatus: "public",
+                  metrics: {
+                    ...metricsData,
+                    engagementRate,
+                  },
+                  uesScore: score,
+                  publishedAt: v.publishedAt ? new Date(v.publishedAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+                } as Post;
+              });
           }
         }
-
-        let deletedIds = new Set<string>();
-        if (typeof window !== "undefined") {
-          try {
-            const cachedDeleted = localStorage.getItem("ues_deleted_posts");
-            if (cachedDeleted) {
-              const parsed = JSON.parse(cachedDeleted);
-              if (Array.isArray(parsed)) deletedIds = new Set(parsed);
-            }
-          } catch {}
-        }
-
-        fetchedYoutubePosts = videoItems
-          .filter((v: any) => !deletedIds.has(v.id))
-          .filter((v: any) => !v.privacyStatus || v.privacyStatus === "public")
-          .map((v: any, index: number) => {
-            const views = typeof v.views === "number" ? v.views : null;
-            const likes = typeof v.likes === "number" ? v.likes : null;
-            const comments = typeof v.comments === "number" ? v.comments : null;
-
-            const metricsData = {
-              likes,
-              comments,
-              shares: null,
-              views,
-              saves: null,
-              reach: null,
-              impressions: null,
-              followerCount: v.followerCount || null,
-              dataSource: "youtube_api",
-              syncStatus: "success" as const,
-            };
-
-            const { score, engagementRate } = calculateUnifiedEngagement(metricsData);
-
-            return {
-              id: `yt-live-${v.id || index}`,
-              platform: "youtube" as const,
-              title: v.title || "YouTube Channel Video",
-              thumbnailUrl: v.thumbnailUrl || undefined,
-              url: v.id ? `https://www.youtube.com/watch?v=${v.id}` : undefined,
-              type: "video" as const,
-              status: "active" as const,
-              privacyStatus: "public",
-              metrics: {
-                ...metricsData,
-                engagementRate,
-              },
-              uesScore: score,
-              publishedAt: v.publishedAt ? new Date(v.publishedAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
-            } as Post;
-          });
+      } else {
+        fetchedYoutubePosts = [];
       }
 
       // ── Live posts from all other platforms ──
-      let fetchedPlatformPosts: Post[] = [];
-      let fetchedErrors: string[] = [];
+      let fetchedPlatformPosts: Post[] = cachedLivePlatformPosts;
+      let fetchedErrors: string[] = cachedPlatformErrors;
       if (platformRes && platformRes.ok) {
         const platformData = await platformRes.json();
-        if (Array.isArray(platformData.posts)) {
-          fetchedPlatformPosts = platformData.posts as Post[];
-        }
-        if (Array.isArray(platformData.errors)) {
-          fetchedErrors = platformData.errors as string[];
-        }
+        const incomingPosts = Array.isArray(platformData.posts) ? (platformData.posts as Post[]) : [];
+        const incomingErrors = Array.isArray(platformData.errors) ? (platformData.errors as string[]) : [];
+        fetchedErrors = incomingErrors;
+
+        // Parse which platforms failed
+        const failedPlatforms = new Set<string>();
+        incomingErrors.forEach((errStr) => {
+          const lower = errStr.toLowerCase();
+          if (lower.includes("instagram")) failedPlatforms.add("instagram");
+          if (lower.includes("facebook")) failedPlatforms.add("facebook");
+          if (lower.includes("threads")) failedPlatforms.add("threads");
+          if (lower.includes("x") || lower.includes("twitter")) failedPlatforms.add("x");
+        });
+
+        // Filter out cached posts for platforms that succeeded, keeping cached posts for failed platforms
+        const retainedCachedPosts = cachedLivePlatformPosts.filter((p) => {
+          const plat = (p.platform as string) === "twitter" ? "x" : p.platform;
+          return failedPlatforms.has(plat);
+        });
+
+        // Merge retained cached posts + all successfully fetched incoming posts
+        fetchedPlatformPosts = [
+          ...retainedCachedPosts,
+          ...incomingPosts,
+        ];
       }
 
       // ── Custom posts ──
-      let customUserPosts: Post[] = [];
+      let customUserPosts: Post[] = cachedCustomPosts;
       if (customRes && customRes.ok) {
         const customData = await customRes.json();
         if (Array.isArray(customData.posts)) {
           customUserPosts = customData.posts;
         }
-      } else if (typeof window !== "undefined") {
+      } else if (typeof window !== "undefined" && !hasFetchedPostsOnce) {
         try {
           const cachedCustom = localStorage.getItem("ues_custom_posts");
           if (cachedCustom) {
