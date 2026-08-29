@@ -182,6 +182,9 @@ export async function GET(request: Request) {
     } else if (platform === "instagram") {
       const tokenResponse = await exchangeInstagramCode(code, buildRedirectUri(request, "INSTAGRAM_REDIRECT_URI"));
       const accessToken = tokenResponse.access_token;
+      if (!accessToken) {
+        throw new Error(tokenResponse.error_message || "Failed to exchange Instagram code");
+      }
       const refreshToken = tokenResponse.refresh_token;
       const profile = await fetchInstagramProfile(accessToken);
       const connection = normalizeConnection("instagram", profile);
@@ -199,6 +202,9 @@ export async function GET(request: Request) {
     } else if (platform === "facebook") {
       const tokenResponse = await exchangeFacebookCode(code, buildRedirectUri(request, "FACEBOOK_REDIRECT_URI"));
       const accessToken = tokenResponse.access_token;
+      if (!accessToken) {
+        throw new Error(tokenResponse.error?.message || "Failed to exchange Facebook code");
+      }
       const refreshToken = tokenResponse.refresh_token; // may be absent
       const profile = await fetchFacebookProfile(accessToken);
       const connection = normalizeConnection("facebook", profile);
@@ -213,6 +219,9 @@ export async function GET(request: Request) {
     } else if (platform === "threads") {
       const tokenResponse = await exchangeThreadsCode(code, buildRedirectUri(request, "THREADS_REDIRECT_URI"));
       const accessToken = tokenResponse.access_token;
+      if (!accessToken) {
+        throw new Error(tokenResponse.error_message || "Failed to exchange Threads code");
+      }
       const refreshToken = tokenResponse.refresh_token; // may be absent
       const profile = await fetchThreadsProfile(accessToken);
       const connection = normalizeConnection("threads", profile);
@@ -228,6 +237,9 @@ export async function GET(request: Request) {
       if (!record.codeVerifier) throw new Error("Missing PKCE code verifier in session state");
       const tokenResponse = await exchangeTwitterCode(code, record.codeVerifier, buildRedirectUri(request, "TWITTER_REDIRECT_URI"));
       const accessToken = tokenResponse.access_token;
+      if (!accessToken) {
+        throw new Error(tokenResponse.error_description || "Failed to exchange X code");
+      }
       const refreshToken = tokenResponse.refresh_token; // usually present if offline.access was requested
       const profile = await fetchTwitterProfile(accessToken);
       const connection = normalizeConnection("x", profile);

@@ -135,7 +135,11 @@ export async function getUserConnectionSecrets(uid: string, platformId: string) 
     }
     try {
       const snapshot = await userConnectionSecretsDoc(uid, platformId).get();
-      return snapshot.exists ? (snapshot.data() as Record<string, unknown>) : fileSecrets;
+      const data = snapshot.exists ? (snapshot.data() as Record<string, unknown>) : null;
+      if (data && typeof data.accessToken === "string" && data.accessToken) {
+        return data;
+      }
+      return fileSecrets;
     } catch (error) {
       console.warn("Falling back to persistent connection secrets:", error);
       return fileSecrets;
