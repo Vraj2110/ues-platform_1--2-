@@ -27,6 +27,10 @@ export function useRealTimePosts() {
 
   const fetchData = useCallback(async (user: any) => {
     if (!user) {
+      // If we have already fetched posts, do not clear the cache during transient auth loading states.
+      if (hasFetchedPostsOnce) {
+        return;
+      }
       // Clear cache and local state on logout/unauthenticated
       cachedYoutubeConnected = false;
       cachedConnectedPlatforms = new Set();
