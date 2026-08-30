@@ -292,19 +292,25 @@ export default function AddPostPage() {
           try {
             try {
               // Try to upload to Firebase Storage first (guarantees that Meta's CDN can download it without blocks)
-              const { ref, uploadBytes, getDownloadURL } = await import("firebase/storage");
+              const { ref, uploadBytesResumable, getDownloadURL } = await import("firebase/storage");
               const storageRef = ref(storage, `posts/${Date.now()}_${fileToUpload.name}`);
-              setUploadProgress(30);
+              
+              // Use Resumable upload to show dynamic progress percentage on the UI
+              const uploadTask = uploadBytesResumable(storageRef, fileToUpload);
+              
+              await new Promise<void>((resolve, reject) => {
+                uploadTask.on(
+                  "state_changed",
+                  (snapshot) => {
+                    const pct = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 40) + 25; // 25% to 65%
+                    setUploadProgress(pct);
+                  },
+                  (error) => reject(error),
+                  () => resolve()
+                );
+              });
 
-              const uploadPromise = uploadBytes(storageRef, fileToUpload);
-              const timeoutPromise = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error("Firebase Storage upload timed out after 8 seconds")), 8000)
-              );
-
-              // Race the upload against the 8-second timeout to prevent hanging at 30%
-              await Promise.race([uploadPromise, timeoutPromise]);
-
-              setUploadProgress(60);
+              setUploadProgress(68);
               mediaUrl = await getDownloadURL(storageRef);
               console.log("Uploaded successfully to Firebase Storage:", mediaUrl);
             } catch (storageErr) {
