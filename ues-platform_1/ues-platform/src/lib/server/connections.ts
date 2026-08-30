@@ -80,6 +80,11 @@ export async function getUserConnections(uid: string): Promise<Record<string, Pl
     }
   }
 
+  // If we already have the local connections in memory, return immediately with zero latency!
+  if (Object.keys(fileConns).length >= 4) {
+    return fileConns;
+  }
+
   if (uid !== "demo-user" && isFirebaseAdminConfigured) {
     try {
       const snapshot = await adminDb.collection("users").doc(uid).collection("platformConnections").get();
@@ -132,6 +137,11 @@ export async function getUserConnectionSecrets(uid: string, platformId: string) 
         break;
       }
     }
+  }
+
+  // If we already have the secret in local memory, return immediately!
+  if (fileSecrets && typeof (fileSecrets as any).accessToken === "string" && (fileSecrets as any).accessToken) {
+    return fileSecrets;
   }
 
   if (uid !== "demo-user" && isFirebaseAdminConfigured) {
