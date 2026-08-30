@@ -26,37 +26,13 @@ export function useRealTimePosts() {
   const [platformErrors, setPlatformErrors] = useState<string[]>(cachedPlatformErrors);
 
   const fetchData = useCallback(async (user: any) => {
-    if (!user) {
-      // If we have already fetched posts, do not clear the cache during transient auth loading states.
-      if (hasFetchedPostsOnce) {
-        return;
-      }
-      // Clear cache and local state on logout/unauthenticated
-      cachedYoutubeConnected = false;
-      cachedConnectedPlatforms = new Set();
-      cachedCheckingYoutubeConnection = false;
-      cachedLiveYoutubePosts = [];
-      cachedLivePlatformPosts = [];
-      cachedCustomPosts = [];
-      cachedPlatformErrors = [];
-      hasFetchedPostsOnce = false;
-
-      setYoutubeConnected(false);
-      setConnectedPlatforms(new Set());
-      setLiveYoutubePosts([]);
-      setLivePlatformPosts([]);
-      setCustomPosts([]);
-      setPlatformErrors([]);
-      setCheckingYoutubeConnection(false);
-      return;
-    }
-
     try {
       let token = "";
-      try {
-        token = await user.getIdToken();
-      } catch {}
-
+      if (user) {
+        try {
+          token = await user.getIdToken();
+        } catch {}
+      } 
       const headers: Record<string, string> = token ? { authorization: `Bearer ${token}` } : {};
 
       // ── Phase 1: Fast Database Fetching (Connections & Saved Database Posts) ──
@@ -287,11 +263,9 @@ export function useRealTimePosts() {
     };
   }, [fetchData]);
 
-  // ── Build the merged post list ───────────────────────────────────────────
   const hasAnyConnection = youtubeConnected || connectedPlatforms.size > 0;
-
-  // Static demo fallback — only show if NO real accounts are connected and we are not in loading/checking phase
-  const staticFallback = checkingYoutubeConnection ? [] : POSTS.filter(() => !hasAnyConnection);
+  // Static demo fallback — only show if NO real accounts are connected AND no custom posts exist
+  const staticFallback = (checkingYoutubeConnection || hasAnyConnection || customPosts.length > 0) ? [] : POSTS;
 
   // Normalize platform names (e.g., twitter -> x)
   // customPosts = DB synced posts (authoritative after POST /api/sync)
