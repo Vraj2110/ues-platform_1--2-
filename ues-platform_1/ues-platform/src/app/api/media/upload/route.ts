@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { adminStorage, isFirebaseAdminConfigured } from "@/lib/server/firebaseAdmin";
+import fs from "fs";
+import path from "path";
+import os from "os";
 
 export const dynamic = "force-dynamic";
 
@@ -46,33 +49,31 @@ export async function POST(request: Request) {
         
         return NextResponse.json({ url: publicUrl });
       } catch (storageErr: any) {
-        console.warn("Firebase Admin Storage upload failed, falling back to Litterbox:", storageErr?.message || storageErr);
+        console.warn("Firebase Admin Storage upload failed, falling back to local file hosting:", storageErr?.message || storageErr);
       }
     }
 
-    // 2. Fallback to Litterbox (highly reliable, returns direct download URL with range request support)
-    const uploadForm = new FormData();
-    uploadForm.append("reqtype", "fileupload");
-    uploadForm.append("time", "1h");
-    uploadForm.append("fileToUpload", new Blob([buffer], { type: file.type }), file.name);
+    // 2. Fallback to self-hosted URL via temp directory
+    try {
+      const tempDir = path.join(os.tmpdir(), "ues-media");
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
 
-    console.log("Uploading file to Litterbox from server side...", file.name, file.size);
-    const response = await fetch("https://litterbox.catbox.moe/resources/api.php", {
-      method: "POST",
-      body: uploadForm,
-    });
+      const filename = `${Date.now()}_${file.name.replace(/\s+/g, "_")}`;
+      const filePath = path.join(tempDir, filename);
+      fs.writeFileSync(filePath, buffer);
 
-    if (!response.ok) {
-      throw new Error(`Litterbox upload failed with status ${response.status}`);
+      const host = request.headers.get("x-forwarded-host") || request.headers.get("host") || "localhost:3000";
+      const protocol = request.headers.get("x-forwarded-proto") || "http";
+      const publicUrl = `${protocol}://${host}/api/media/serve/${filename}`;
+
+      console.log("Successfully saved locally. Serving from:", publicUrl);
+      return NextResponse.json({ url: publicUrl });
+    } catch (localErr: any) {
+      console.error("Local file storage fallback failed:", localErr);
+      throw localErr;
     }
-
-    const fileUrl = (await response.text()).trim();
-    if (!fileUrl.startsWith("https://")) {
-      throw new Error(`Litterbox returned invalid response: ${fileUrl}`);
-    }
-
-    console.log("Successfully uploaded to Litterbox:", fileUrl);
-    return NextResponse.json({ url: fileUrl });
   } catch (err: any) {
     console.error("Upload API Error:", err);
     return NextResponse.json({ error: err.message || "Upload failed" }, { status: 500 });
