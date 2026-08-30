@@ -294,8 +294,8 @@ export default function AddPostPage() {
             const formData = new FormData();
             formData.append("file", fileToUpload);
             
-            console.log("Uploading media directly to self-hosted server storage...");
-            const uploadRes = await fetch("/api/media/upload", {
+            console.log("Uploading media directly to tmpfiles.org from browser to bypass Vercel size limit...");
+            const uploadRes = await fetch("https://tmpfiles.org/api/v1/upload", {
               method: "POST",
               body: formData,
             });
@@ -306,11 +306,12 @@ export default function AddPostPage() {
             }
             
             const uploadData = await uploadRes.json();
-            if (!uploadData.url) {
-              throw new Error("Invalid response from media upload provider.");
+            if (!uploadData.data?.url) {
+              throw new Error("Invalid response from temporary storage provider.");
             }
             
-            mediaUrl = uploadData.url;
+            // Format to direct download URL (required by Meta Graph API)
+            mediaUrl = uploadData.data.url.replace("tmpfiles.org/", "tmpfiles.org/dl/");
             console.log("Successfully uploaded to direct CDN URL:", mediaUrl);
             setUploadProgress(70);
           } catch (err: any) {
