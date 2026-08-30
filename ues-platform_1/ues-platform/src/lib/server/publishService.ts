@@ -213,7 +213,7 @@ export async function publishToFacebook(
       requestOptions = {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ access_token: pageToken, url: finalMediaUrl, caption: text }),
+        body: JSON.stringify({ access_token: pageToken, url: finalMediaUrl, caption: text, published: true }),
       };
 
     // ── Video via reliable public URL ──
@@ -227,7 +227,7 @@ export async function publishToFacebook(
       requestOptions = {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ access_token: pageToken, file_url: finalMediaUrl, description: text }),
+        body: JSON.stringify({ access_token: pageToken, file_url: finalMediaUrl, description: text, published: true }),
       };
 
 
@@ -319,14 +319,15 @@ export async function publishToInstagram(accessToken: string, targetId: string, 
         await new Promise(resolve => setTimeout(resolve, delay));
       }
       
-      const statusRes = await fetch(`https://graph.instagram.com/v20.0/${creationId}?fields=status_code&access_token=${accessToken}`);
+      const statusRes = await fetch(`https://graph.instagram.com/v20.0/${creationId}?fields=status_code,status_message&access_token=${accessToken}`);
       if (statusRes.ok) {
         const statusData = await statusRes.json();
         if (statusData.status_code === 'FINISHED') {
           isReady = true;
           break;
         } else if (statusData.status_code === 'ERROR') {
-          return { success: false, error: 'Instagram failed to process the media file.' };
+          const errMsg = statusData.status_message || 'Instagram failed to process the media file.';
+          return { success: false, error: `Instagram Error: ${errMsg}` };
         }
       }
       attempts++;
