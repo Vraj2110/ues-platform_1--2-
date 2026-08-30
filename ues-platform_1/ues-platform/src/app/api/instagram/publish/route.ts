@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { verifyIdToken } from "@/lib/server/auth";
+import { getMetaCompatibleUrl } from "@/lib/server/publishService";
 import {
   getUserConnectionSecrets,
   getUserConnections,
@@ -123,70 +124,7 @@ export async function POST(request: Request) {
       caption: caption || "",
     };
 
-    let finalMediaUrl = mediaUrl;
-    // Meta's web crawler often blocks temporary file hosts like tmpfiles.org or returns "The image format is not supported."
-    // Re-host the image on a platform Meta accepts.
-    if (finalMediaUrl?.includes("tmpfiles.org") && mediaType === "image") {
-      console.log("Downloading image from tmpfiles.org to re-host on a reliable public URL for Meta...", finalMediaUrl);
-      try {
-        let actualDownloadUrl = finalMediaUrl;
-        
-        // tmpfiles.org/dl/ redirects to a viewer page, so we must fetch the viewer HTML and extract the real download URL
-        const viewerRes = await fetch(finalMediaUrl.replace('/dl/', '/'), {
-          headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
-        });
-        
-        if (viewerRes.ok) {
-          const html = await viewerRes.text();
-          const match = html.match(/href="(https:\/\/tmpfiles\.org\/dl\/[^"]+)"/);
-          if (match && match[1]) {
-            actualDownloadUrl = match[1];
-            console.log("Extracted true download URL:", actualDownloadUrl);
-          }
-        }
-
-        const tmpFileRes = await fetch(actualDownloadUrl, {
-          headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-          }
-        });
-        if (!tmpFileRes.ok) {
-          throw new Error(`tmpfiles.org returned ${tmpFileRes.status} ${tmpFileRes.statusText}`);
-        }
-        
-        const arrayBuffer = await tmpFileRes.arrayBuffer();
-        const base64Data = Buffer.from(arrayBuffer).toString('base64');
-        console.log("Downloaded image from tmpfiles.org, size:", base64Data.length);
-        
-        const form = new URLSearchParams();
-        form.append('key', '6d207e02198a847aa98d0a2a901485a5'); // Public free API key
-        form.append('action', 'upload');
-        form.append('source', base64Data);
-        form.append('format', 'json');
-        
-        const fiRes = await fetch('https://freeimage.host/api/1/upload', {
-          method: 'POST',
-          body: form,
-        });
-        
-        if (!fiRes.ok) {
-          const text = await fiRes.text();
-          throw new Error(`freeimage.host returned ${fiRes.status} ${fiRes.statusText}: ${text}`);
-        }
-        
-        const fiData = await fiRes.json();
-        if (fiData.image?.url) {
-          finalMediaUrl = fiData.image.url;
-          console.log("Successfully re-hosted image for Meta:", finalMediaUrl);
-        } else {
-          throw new Error(`freeimage.host did not return an image URL: ${JSON.stringify(fiData)}`);
-        }
-      } catch (err) {
-        console.error("Failed to re-host image:", err);
-        // Fallback to a placeholder if re-hosting fails so it still posts something
-        finalMediaUrl = "https://images.unsplash.com/photo-1611162617474-5b21e879e113?q=80&w=1000&auto=format&fit=crop";
-      }
-    }
+    const finalMediaUrl = await getMetaCompatibleUrl(mediaUrl, mediaType);
 
     if (mediaType === "video") {
       mediaBody.media_type = "REELS";

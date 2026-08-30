@@ -1,5 +1,105 @@
 import { getUserConnectionSecrets } from "@/lib/server/connections";
 
+export async function getMetaCompatibleUrl(mediaUrl: string, mediaType: "image" | "video"): Promise<string> {
+  if (!mediaUrl || !mediaUrl.includes("tmpfiles.org")) {
+    return mediaUrl;
+  }
+
+  console.log(`[Meta URL Helper] Processing tmpfiles.org URL for Meta: ${mediaUrl}`);
+  try {
+    let actualDownloadUrl = mediaUrl;
+    if (!actualDownloadUrl.includes("tmpfiles.org/dl/")) {
+      actualDownloadUrl = actualDownloadUrl.replace("tmpfiles.org/", "tmpfiles.org/dl/");
+    }
+
+    // 1. Fetch the viewer HTML to extract the real direct download link
+    const viewerUrl = actualDownloadUrl.replace('/dl/', '/');
+    const viewerRes = await fetch(viewerUrl, {
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
+    });
+
+    if (viewerRes.ok) {
+      const html = await viewerRes.text();
+      const match = html.match(/href="(https:\/\/tmpfiles\.org\/dl\/[^"]+)"/);
+      if (match && match[1]) {
+        actualDownloadUrl = match[1];
+        console.log("[Meta URL Helper] Extracted true download URL:", actualDownloadUrl);
+      }
+    }
+
+    // 2. Fetch the file buffer
+    const fileRes = await fetch(actualDownloadUrl, {
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
+    });
+    if (!fileRes.ok) {
+      throw new Error(`Failed to download file from tmpfiles: ${fileRes.statusText}`);
+    }
+
+    const arrayBuffer = await fileRes.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const contentType = fileRes.headers.get("content-type") || (mediaType === "video" ? "video/mp4" : "image/jpeg");
+    const extension = mediaType === "video" ? "mp4" : "jpg";
+    const filename = `rehosted_${Date.now()}.${extension}`;
+
+    // 3. Try Firebase Storage if configured
+    const { adminStorage, isFirebaseAdminConfigured } = require("@/lib/server/firebaseAdmin");
+    if (isFirebaseAdminConfigured) {
+      try {
+        console.log("[Meta URL Helper] Re-hosting tmpfiles.org media to Firebase Storage...");
+        const bucket = adminStorage.bucket();
+        const firebaseFilename = `posts/${filename}`;
+        const fileRef = bucket.file(firebaseFilename);
+
+        await fileRef.save(buffer, {
+          metadata: { contentType },
+        });
+
+        let publicUrl = `https://storage.googleapis.com/${bucket.name}/${firebaseFilename}`;
+        try {
+          await fileRef.makePublic();
+        } catch {
+          const [signedUrl] = await fileRef.getSignedUrl({
+            action: 'read',
+            expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
+          });
+          publicUrl = signedUrl;
+        }
+        console.log("[Meta URL Helper] Successfully re-hosted to Firebase:", publicUrl);
+        return publicUrl;
+      } catch (fbErr) {
+        console.warn("[Meta URL Helper] Firebase re-hosting failed, falling back to Litterbox:", fbErr);
+      }
+    }
+
+    // 4. Fallback: Upload to Litterbox server-side (no CORS issue)
+    console.log("[Meta URL Helper] Re-hosting tmpfiles.org media to Litterbox...");
+    const uploadForm = new FormData();
+    uploadForm.append("reqtype", "fileupload");
+    uploadForm.append("time", "1h");
+    uploadForm.append("fileToUpload", new Blob([buffer], { type: contentType }), filename);
+
+    const response = await fetch("https://litterbox.catbox.moe/resources/api.php", {
+      method: "POST",
+      body: uploadForm,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Litterbox upload failed with status ${response.status}`);
+    }
+
+    const fileUrl = (await response.text()).trim();
+    if (!fileUrl.startsWith("https://")) {
+      throw new Error(`Litterbox returned invalid response: ${fileUrl}`);
+    }
+
+    console.log("[Meta URL Helper] Successfully re-hosted to Litterbox:", fileUrl);
+    return fileUrl;
+  } catch (err: any) {
+    console.error("[Meta URL Helper] Error re-hosting media:", err);
+    return mediaUrl;
+  }
+}
+
 export interface PublishResult {
   success: boolean;
   platformPostId?: string;
@@ -153,8 +253,8 @@ export async function publishToFacebook(
     let targetId = "me";
 
     let finalMediaUrl = mediaUrl;
-    if (finalMediaUrl && finalMediaUrl.includes("tmpfiles.org") && !finalMediaUrl.includes("tmpfiles.org/dl/")) {
-      finalMediaUrl = finalMediaUrl.replace("tmpfiles.org/", "tmpfiles.org/dl/");
+    if (finalMediaUrl) {
+      finalMediaUrl = await getMetaCompatibleUrl(finalMediaUrl, mediaType || "image");
     }
 
     // Try to get a Page token — required for posting to Pages
@@ -308,10 +408,7 @@ export async function publishToFacebook(
 
 export async function publishToInstagram(accessToken: string, targetId: string, text: string, mediaUrl: string, mediaType: "image" | "video"): Promise<PublishResult> {
   try {
-    let finalMediaUrl = mediaUrl;
-    if (finalMediaUrl && finalMediaUrl.includes("tmpfiles.org") && !finalMediaUrl.includes("tmpfiles.org/dl/")) {
-      finalMediaUrl = finalMediaUrl.replace("tmpfiles.org/", "tmpfiles.org/dl/");
-    }
+    const finalMediaUrl = await getMetaCompatibleUrl(mediaUrl, mediaType);
 
     let mediaEndpoint = `https://graph.instagram.com/v20.0/${targetId}/media`;
     const mediaBody: any = {
