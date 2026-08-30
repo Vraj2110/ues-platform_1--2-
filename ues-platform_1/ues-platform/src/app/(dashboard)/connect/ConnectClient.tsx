@@ -21,17 +21,22 @@ export default function ConnectClient({ platforms }: { platforms: Platform[] }) 
   const safePlatforms = Array.isArray(platforms) ? platforms : [];
 
   const loadConnections = React.useCallback(
-    async (u: any) => {
-      if (!u) return;
+    async (u?: any) => {
       setError(null);
       setLoadingConnections(true);
 
       try {
-        const token = await u.getIdToken();
-        const res = await fetch("/api/connections", { headers: { authorization: `Bearer ${token}` } });
+        let token = "";
+        if (u) {
+          try {
+            token = await u.getIdToken();
+          } catch {}
+        }
+        const headers: Record<string, string> = token ? { authorization: `Bearer ${token}` } : {};
+        const res = await fetch("/api/connections", { headers });
 
         if (!res.ok) {
-          if (res.status === 401) {
+          if (res.status === 401 && u) {
             router.push("/login");
           } else {
             setError("Unable to load your connected platforms. Please try again.");
@@ -75,23 +80,15 @@ export default function ConnectClient({ platforms }: { platforms: Platform[] }) 
         }
       } catch {}
     }
-  }, []);
+    // Fetch immediately on mount
+    loadConnections();
+  }, [loadConnections]);
 
   useEffect(() => {
     try {
       const unsubscribe = auth.onAuthStateChanged((u) => {
         setUser(u);
-        if (u) {
-          loadConnections(u);
-        } else {
-          setLoadingConnections(false);
-          // Prevent transient cache clearing during initialization if connections are cached in localStorage.
-          const hasCached = typeof window !== "undefined" && localStorage.getItem("ues_connections");
-          if (!hasCached) {
-            setConnections({});
-          }
-          setHasLoadedConnections(true);
-        }
+        loadConnections(u);
       });
 
       return () => unsubscribe();
