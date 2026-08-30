@@ -37,7 +37,7 @@ export async function POST(request: Request) {
     if (creationId) {
       // 1. Try to get status
       const statusRes = await fetch(
-        `https://graph.instagram.com/v20.0/${creationId}?fields=status_code&access_token=${accessToken}`
+        `https://graph.instagram.com/v20.0/${creationId}?fields=status_code,status_message&access_token=${accessToken}`
       );
       
       if (!statusRes.ok) {
@@ -49,7 +49,8 @@ export async function POST(request: Request) {
       if (statusData.status_code === "IN_PROGRESS") {
         return NextResponse.json({ success: true, isReady: false, creationId });
       } else if (statusData.status_code === "ERROR" || statusData.status_code === "EXPIRED") {
-        return NextResponse.json({ error: "Instagram failed to process the media file." }, { status: 400 });
+        const detailedError = statusData.status_message || "Instagram failed to process the media file.";
+        return NextResponse.json({ error: `Instagram Media Processing Error: ${detailedError}` }, { status: 400 });
       } else if (statusData.status_code === "FINISHED") {
         const publishEndpoint = `https://graph.instagram.com/v20.0/${instagramAccountId}/media_publish`;
         const publishRes = await fetch(publishEndpoint, {
