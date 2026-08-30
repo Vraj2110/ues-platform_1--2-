@@ -254,6 +254,31 @@ export async function publishToFacebook(
       return { success: false, error: `Facebook API error: ${data.error.message || "Invalid parameter"}. Ensure your Facebook app has "pages_manage_posts" permission and you are a Page admin.` };
     }
     if (!response.ok) {
+      // If we failed to publish with media (e.g. due to blocked URL/crawler error),
+      // we attempt a resilient fallback to a text-only feed post so the text is at least uploaded!
+      if (finalMediaUrl) {
+        console.warn("Facebook media publishing failed. Falling back to text-only feed post...");
+        const fallbackEndpoint = `https://graph.facebook.com/v19.0/${targetId}/feed`;
+        const fallbackText = `${text}\n\n[Media Link: ${finalMediaUrl}]`;
+        try {
+          const fallbackRes = await fetch(fallbackEndpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ access_token: pageToken, message: fallbackText }),
+          });
+          const fallbackData = await fallbackRes.json();
+          if (fallbackRes.ok) {
+            const finalPostId = fallbackData.id && String(fallbackData.id).includes("_") ? String(fallbackData.id) : `${targetId}_${fallbackData.id}`;
+            return {
+              success: true,
+              platformPostId: finalPostId,
+              url: `https://facebook.com/${finalPostId}`,
+            };
+          }
+        } catch (fallbackErr) {
+          console.error("Facebook fallback posting failed:", fallbackErr);
+        }
+      }
       return { success: false, error: data.error?.message || "Failed to publish to Facebook" };
     }
 
@@ -319,14 +344,14 @@ export async function publishToInstagram(accessToken: string, targetId: string, 
         await new Promise(resolve => setTimeout(resolve, delay));
       }
       
-      const statusRes = await fetch(`https://graph.instagram.com/v20.0/${creationId}?fields=status_code,status_message&access_token=${accessToken}`);
+      const statusRes = await fetch(`https://graph.instagram.com/v20.0/${creationId}?fields=status_code,status&access_token=${accessToken}`);
       if (statusRes.ok) {
         const statusData = await statusRes.json();
         if (statusData.status_code === 'FINISHED') {
           isReady = true;
           break;
         } else if (statusData.status_code === 'ERROR') {
-          const errMsg = statusData.status_message || 'Instagram failed to process the media file.';
+          const errMsg = statusData.status || 'Instagram failed to process the media file.';
           return { success: false, error: `Instagram Error: ${errMsg}` };
         }
       }
