@@ -688,27 +688,33 @@ export async function fetchInstagramRecentMedia(accountId: string, accessToken: 
 // ─── Facebook ────────────────────────────────────────────────────────────────
 
 export async function fetchFacebookRecentPosts(accessToken: string, limit = 20) {
-  const pagesRes = await fetch(
-    `https://graph.facebook.com/v19.0/me/accounts?access_token=${accessToken}&fields=id,access_token,followers_count,fan_count`,
-    { cache: "no-store" }
-  );
+  let pages: any[] = [];
   
-  if (!pagesRes.ok) {
-    let errMsg = `Status ${pagesRes.status}`;
-    try {
-      const errJson = await pagesRes.json();
-      if (errJson?.error?.message) {
-        errMsg = errJson.error.message;
-      }
-    } catch {}
-    throw new Error(`Failed to fetch Facebook Pages: ${errMsg}`);
+  try {
+    const pagesRes = await fetch(
+      `https://graph.facebook.com/v19.0/me/accounts?access_token=${accessToken}&fields=id,access_token,followers_count,fan_count`,
+      { cache: "no-store" }
+    );
+    
+    if (pagesRes.ok) {
+      const pagesData = await pagesRes.json();
+      pages = pagesData?.data || [];
+    } else {
+      const errJson = await pagesRes.json().catch(() => null);
+      console.warn(`[Facebook API] Failed to fetch accounts list: ${errJson?.error?.message || pagesRes.status}. Using fallback...`);
+    }
+  } catch (err) {
+    console.warn("[Facebook API] Error requesting pages accounts list, using fallback:", err);
   }
 
-  const pagesData = await pagesRes.json();
-  const pages = pagesData?.data || [];
-
   if (pages.length === 0) {
-    throw new Error("No connected Facebook Pages found. Make sure you own a Page and granted permissions for it during connection.");
+    console.log("[Facebook API] No pages resolved. Falling back to direct /me query...");
+    pages.push({
+      id: "me",
+      access_token: accessToken,
+      followers_count: 0,
+      fan_count: 0,
+    });
   }
 
   const allItems: any[] = [];
