@@ -41,6 +41,7 @@ const PLATFORM_OPTIONS = [
   { value: "youtube", label: "YouTube ▶️", description: "Upload videos directly to YouTube" },
   { value: "instagram", label: "Instagram 📸", description: "Post to Instagram (Image or Reel)" },
   { value: "facebook", label: "Facebook 📘", description: "Post to your Facebook Page (Text, Image, Video)" },
+  { value: "x", label: "X (Twitter) 𝕏", description: "Post tweets & media to X" },
 ];
 
 const YOUTUBE_CATEGORIES = [
@@ -64,6 +65,7 @@ const CHAR_LIMITS: Record<string, number> = {
   facebook: 63206,
   instagram: 2200,
   youtube: 5000,
+  x: 280,
 };
 
 const PLATFORM_DETAILS: Record<string, {
@@ -94,6 +96,13 @@ const PLATFORM_DETAILS: Record<string, {
     badgeClass: "bg-blue-500/10 text-blue-400 border-blue-500/20",
     themeColor: "from-blue-500 to-blue-600",
   },
+  x: {
+    icon: <span className="text-sm font-bold text-white shadow-sm font-sans bg-black border border-neutral-700 w-5 h-5 rounded-full flex items-center justify-center">𝕏</span>,
+    activeClass: "border-white bg-white/5 shadow-[0_0_15px_rgba(255,255,255,0.1)]",
+    hoverClass: "hover:border-white/30 hover:bg-white/5",
+    badgeClass: "bg-white/10 text-white border-white/20",
+    themeColor: "from-neutral-700 to-neutral-900",
+  },
   threads: {
     icon: <span className="text-xs font-bold text-white shadow-sm font-sans bg-neutral-800 border border-neutral-700 w-5 h-5 rounded-full flex items-center justify-center">@</span>,
     activeClass: "border-white bg-white/5 shadow-[0_0_15px_rgba(255,255,255,0.1)]",
@@ -107,6 +116,7 @@ const SUBMIT_THEMES: Record<string, string> = {
   youtube: "bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white hover:shadow-[0_0_25px_rgba(239,68,68,0.35)] shadow-[0_4px_15px_rgba(239,68,68,0.15)]",
   instagram: "bg-gradient-to-r from-pink-600 via-rose-500 to-yellow-500 hover:from-pink-500 hover:to-rose-400 text-white hover:shadow-[0_0_25px_rgba(236,72,153,0.35)] shadow-[0_4px_15px_rgba(236,72,153,0.15)]",
   facebook: "bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white hover:shadow-[0_0_25px_rgba(59,130,246,0.35)] shadow-[0_4px_15px_rgba(59,130,246,0.15)]",
+  x: "bg-gradient-to-r from-neutral-800 to-black hover:from-neutral-700 hover:to-neutral-900 text-white hover:shadow-[0_0_25px_rgba(255,255,255,0.2)] shadow-[0_4px_15px_rgba(0,0,0,0.3)]",
   threads: "bg-gradient-to-r from-neutral-700 to-neutral-800 hover:from-neutral-600 hover:to-neutral-700 text-white hover:shadow-[0_0_25px_rgba(255,255,255,0.15)] shadow-[0_4px_15px_rgba(255,255,255,0.05)]",
 };
 

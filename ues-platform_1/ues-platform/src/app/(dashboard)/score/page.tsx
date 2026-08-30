@@ -110,6 +110,7 @@ export default function ScorePage() {
       instagram: { uesSum: 0, count: 0, name: "Instagram", icon: "📸", color: "#FF6B6B" },
       youtube: { uesSum: 0, count: 0, name: "YouTube", icon: "▶️", color: "#4ECDC4" },
       facebook: { uesSum: 0, count: 0, name: "Facebook", icon: "📘", color: "#1877F2" },
+      x: { uesSum: 0, count: 0, name: "X (Twitter)", icon: "𝕏", color: "#F7FFF7" },
     };
 
     posts.forEach(p => {

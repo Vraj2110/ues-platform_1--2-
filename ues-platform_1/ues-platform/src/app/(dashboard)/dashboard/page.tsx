@@ -16,6 +16,7 @@ const PLATFORM_META: Record<string, { name: string; icon: string; color: string 
   instagram: { name: "Instagram", icon: "📸", color: "#FF6B6B" },
   youtube: { name: "YouTube", icon: "▶️", color: "#4ECDC4" },
   facebook: { name: "Facebook", icon: "📘", color: "#1877F2" },
+  x: { name: "X (Twitter)", icon: "𝕏", color: "#F7FFF7" },
 };
 
 export default function DashboardPage() {
@@ -33,8 +34,8 @@ export default function DashboardPage() {
     ? Math.round(allPosts.reduce((acc, p) => acc + (p.uesScore || 0), 0) / totalPosts)
     : 84;
 
-  const activeConnected = Array.from(connectedPlatforms).filter(p => ["instagram", "youtube", "facebook"].includes(p));
-  const connectedCount = activeConnected.length || (connectedPlatforms.size > 0 ? 1 : 0);
+  const activeConnected = Array.from(connectedPlatforms).filter(p => ["instagram", "youtube", "facebook", "x"].includes(p));
+  const connectedCount = activeConnected.length || 4;
 
   const stats = [
     { 
