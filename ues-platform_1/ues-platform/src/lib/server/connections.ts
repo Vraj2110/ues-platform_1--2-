@@ -485,3 +485,33 @@ export async function getDeletedPostIds(uid: string): Promise<Set<string>> {
 
   return combined;
 }
+
+export async function getAllUserIds(): Promise<string[]> {
+  const userIds = new Set<string>();
+
+  // 1. Get from memory store
+  if (memoryStore.connections) {
+    Object.keys(memoryStore.connections).forEach((uid) => {
+      if (uid !== "demo-user") {
+        userIds.add(uid);
+      }
+    });
+  }
+
+  // 2. Get from Firestore
+  if (isFirebaseAdminConfigured) {
+    try {
+      const snapshot = await adminDb.collection("users").get();
+      snapshot.docs.forEach((doc: any) => {
+        if (doc.id !== "demo-user") {
+          userIds.add(doc.id);
+        }
+      });
+    } catch (error) {
+      console.warn("Error listing users from Firestore:", error);
+    }
+  }
+
+  return Array.from(userIds);
+}
+
