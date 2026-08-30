@@ -14,7 +14,7 @@ import {
   Settings,
   UploadCloud,
 } from "lucide-react";
-import { auth } from "@/lib/firebase";
+import { auth, storage } from "@/lib/firebase";
 
 // Custom SVG Icons for brand logos not included in this Lucide bundle
 const YoutubeIcon = (props: React.SVGProps<SVGSVGElement>) => (
@@ -285,21 +285,33 @@ export default function AddPostPage() {
       // ── Media Upload Logic ──
       if (supportsMedia) {
         if (videoFile || thumbnailFile) {
-          const fileToUpload = videoFile || thumbnailFile;
+          const fileToUpload = (videoFile || thumbnailFile) as File;
           mediaType = videoFile ? "video" : "image";
           setUploadProgress(20);
 
           try {
-            const formData = new FormData();
-            formData.append("file", fileToUpload as File);
-            const fallbackRes = await fetch("https://tmpfiles.org/api/v1/upload", {
-              method: "POST",
-              body: formData,
-            });
-            if (!fallbackRes.ok) throw new Error("Temporary storage upload failed");
-            const fallbackData = await fallbackRes.json();
-            // Convert to direct download link required by Meta Graph API
-            mediaUrl = fallbackData.data.url.replace("tmpfiles.org/", "tmpfiles.org/dl/");
+            try {
+              // Try to upload to Firebase Storage first (guarantees that Meta's CDN can download it without blocks)
+              const { ref, uploadBytes, getDownloadURL } = await import("firebase/storage");
+              const storageRef = ref(storage, `posts/${Date.now()}_${fileToUpload.name}`);
+              setUploadProgress(30);
+              await uploadBytes(storageRef, fileToUpload);
+              setUploadProgress(60);
+              mediaUrl = await getDownloadURL(storageRef);
+              console.log("Uploaded successfully to Firebase Storage:", mediaUrl);
+            } catch (storageErr) {
+              console.warn("Firebase Storage upload failed, falling back to tmpfiles.org:", storageErr);
+              const formData = new FormData();
+              formData.append("file", fileToUpload as File);
+              const fallbackRes = await fetch("https://tmpfiles.org/api/v1/upload", {
+                method: "POST",
+                body: formData,
+              });
+              if (!fallbackRes.ok) throw new Error("Temporary storage upload failed");
+              const fallbackData = await fallbackRes.json();
+              // Convert to direct download link required by Meta Graph API
+              mediaUrl = fallbackData.data.url.replace("tmpfiles.org/", "tmpfiles.org/dl/");
+            }
             setUploadProgress(70);
           } catch (err: any) {
             console.error("Upload Error:", err);
