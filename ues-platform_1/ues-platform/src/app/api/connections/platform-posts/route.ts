@@ -155,12 +155,10 @@ export async function GET(request: Request) {
     const posts: any[] = [];
     const platformErrors: string[] = [];
 
-    // Process each connected platform in parallel
+    // Process each connected platform in parallel (only Facebook & Instagram; X is excluded)
     const platformTasks = Object.entries(connections)
-      .filter(([, conn]) => conn?.connected)
+      .filter(([platformId, conn]) => conn?.connected && (platformId === "instagram" || platformId === "facebook"))
       .map(async ([platformId, conn]) => {
-        if (platformId === "youtube") return;
-
         try {
           const secrets = await getUserConnectionSecrets(uid, platformId);
           const accessToken = typeof secrets?.accessToken === "string" ? secrets.accessToken : "";
@@ -291,7 +289,7 @@ export async function GET(request: Request) {
           platformErrors.push(`${platformId}: ${msg}`);
         }
       })
-      .map((task) => Promise.race([task, new Promise((resolve) => setTimeout(resolve, 3500))]));
+      .map((task) => Promise.race([task, new Promise((resolve) => setTimeout(resolve, 8000))]));
 
     await Promise.all(platformTasks);
 
