@@ -152,6 +152,11 @@ export async function publishToFacebook(
     let pageToken = accessToken;
     let targetId = "me";
 
+    let finalMediaUrl = mediaUrl;
+    if (finalMediaUrl && finalMediaUrl.includes("tmpfiles.org") && !finalMediaUrl.includes("tmpfiles.org/dl/")) {
+      finalMediaUrl = finalMediaUrl.replace("tmpfiles.org/", "tmpfiles.org/dl/");
+    }
+
     // Try to get a Page token — required for posting to Pages
     let hasPages = false;
     try {
@@ -196,36 +201,35 @@ export async function publishToFacebook(
       formData.append("source", new Blob([new Uint8Array(rawFileBuffer)], { type: rawFileMime }), rawFileName || "video.mp4");
       requestOptions = { method: "POST", body: formData };
 
-    // ── Image via reliable public URL (not tmpfiles/localhost) ──
+    // ── Image via reliable public URL ──
     } else if (
-      mediaUrl &&
+      finalMediaUrl &&
       mediaType === "image" &&
-      !mediaUrl.startsWith("data:") &&
-      !mediaUrl.includes("tmpfiles.org") &&
-      !mediaUrl.includes("localhost") &&
-      mediaUrl.startsWith("http")
+      !finalMediaUrl.startsWith("data:") &&
+      !finalMediaUrl.includes("localhost") &&
+      finalMediaUrl.startsWith("http")
     ) {
       endpoint = `https://graph.facebook.com/v19.0/${targetId}/photos`;
       requestOptions = {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ access_token: pageToken, url: mediaUrl, caption: text }),
+        body: JSON.stringify({ access_token: pageToken, url: finalMediaUrl, caption: text }),
       };
 
     // ── Video via reliable public URL ──
     } else if (
-      mediaUrl &&
+      finalMediaUrl &&
       mediaType === "video" &&
-      !mediaUrl.includes("tmpfiles.org") &&
-      !mediaUrl.includes("localhost") &&
-      mediaUrl.startsWith("http")
+      !finalMediaUrl.includes("localhost") &&
+      finalMediaUrl.startsWith("http")
     ) {
       endpoint = `https://graph.facebook.com/v19.0/${targetId}/videos`;
       requestOptions = {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ access_token: pageToken, file_url: mediaUrl, description: text }),
+        body: JSON.stringify({ access_token: pageToken, file_url: finalMediaUrl, description: text }),
       };
+
 
     // ── Text-only post (fallback) ──
     } else {
@@ -268,6 +272,11 @@ export async function publishToFacebook(
 
 export async function publishToInstagram(accessToken: string, targetId: string, text: string, mediaUrl: string, mediaType: "image" | "video"): Promise<PublishResult> {
   try {
+    let finalMediaUrl = mediaUrl;
+    if (finalMediaUrl && finalMediaUrl.includes("tmpfiles.org") && !finalMediaUrl.includes("tmpfiles.org/dl/")) {
+      finalMediaUrl = finalMediaUrl.replace("tmpfiles.org/", "tmpfiles.org/dl/");
+    }
+
     let mediaEndpoint = `https://graph.instagram.com/v20.0/${targetId}/media`;
     const mediaBody: any = {
       access_token: accessToken,
@@ -276,9 +285,9 @@ export async function publishToInstagram(accessToken: string, targetId: string, 
 
     if (mediaType === "video") {
       mediaBody.media_type = "REELS";
-      mediaBody.video_url = mediaUrl;
+      mediaBody.video_url = finalMediaUrl;
     } else {
-      mediaBody.image_url = mediaUrl;
+      mediaBody.image_url = finalMediaUrl;
     }
 
     const createResponse = await fetch(mediaEndpoint, {

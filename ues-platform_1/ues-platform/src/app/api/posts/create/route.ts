@@ -323,20 +323,14 @@ export async function POST(request: Request) {
 
         // Re-host tmpfiles.org image to freeimage.host for Facebook so Meta's CDN can fetch it safely
         let finalMediaUrl = mediaUrl || thumbnailUrl;
-        if (finalMediaUrl?.includes("tmpfiles.org") && mediaType === "image") {
+        if (finalMediaUrl && finalMediaUrl.includes("tmpfiles.org") && !finalMediaUrl.includes("tmpfiles.org/dl/")) {
+          finalMediaUrl = finalMediaUrl.replace("tmpfiles.org/", "tmpfiles.org/dl/");
+        }
+
+        if (finalMediaUrl && finalMediaUrl.includes("tmpfiles.org") && mediaType === "image") {
           console.log("Re-hosting Facebook image from tmpfiles.org to freeimage.host...", finalMediaUrl);
           try {
-            let actualDownloadUrl = finalMediaUrl;
-            const viewerRes = await fetch(finalMediaUrl.replace('/dl/', '/'), {
-              headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
-            });
-            if (viewerRes.ok) {
-              const html = await viewerRes.text();
-              const match = html.match(/href="(https:\/\/tmpfiles\.org\/dl\/[^"]+)"/);
-              if (match && match[1]) {
-                actualDownloadUrl = match[1];
-              }
-            }
+            const actualDownloadUrl = finalMediaUrl;
             const tmpFileRes = await fetch(actualDownloadUrl, {
               headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
             });
@@ -522,7 +516,10 @@ export async function POST(request: Request) {
         }
 
         const igText = description ? `${title?.trim() || ""}\n\n${description}`.trim() : (title?.trim() || "");
-        const targetMediaUrl = mediaUrl || thumbnailUrl;
+        let targetMediaUrl = mediaUrl || thumbnailUrl;
+        if (targetMediaUrl && targetMediaUrl.includes("tmpfiles.org") && !targetMediaUrl.includes("tmpfiles.org/dl/")) {
+          targetMediaUrl = targetMediaUrl.replace("tmpfiles.org/", "tmpfiles.org/dl/");
+        }
         
         if (!targetMediaUrl) {
           return NextResponse.json({ error: "Instagram requires an image or video to publish." }, { status: 400 });
