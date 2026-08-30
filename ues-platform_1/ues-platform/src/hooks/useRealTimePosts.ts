@@ -8,24 +8,57 @@ import type { Post } from "@/types";
 
 // Client-side cache to persist state across page navigation
 let cachedYoutubeConnected = false;
-let cachedConnectedPlatforms = new Set<string>();
-let cachedCheckingYoutubeConnection = true;
+let cachedConnectedPlatforms = new Set<string>(["facebook", "youtube", "x", "instagram"]);
+let cachedCheckingYoutubeConnection = false;
 let cachedLiveYoutubePosts: Post[] = [];
 let cachedLivePlatformPosts: Post[] = [];
 let cachedCustomPosts: Post[] = [];
 let cachedPlatformErrors: string[] = [];
 let hasFetchedPostsOnce = false;
 
+function getInitialConnections(): { ytConnected: boolean; set: Set<string> } {
+  if (typeof window !== "undefined") {
+    try {
+      const cached = localStorage.getItem("ues_connections");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const set = new Set<string>();
+        Object.keys(parsed).forEach((k) => {
+          if (parsed[k]?.connected) set.add(k);
+        });
+        if (set.size > 0) {
+          return { ytConnected: !!parsed?.youtube?.connected, set };
+        }
+      }
+    } catch {}
+  }
+  return { ytConnected: true, set: new Set(["facebook", "youtube", "x", "instagram"]) };
+}
+
+function getInitialCustomPosts(): Post[] {
+  if (typeof window !== "undefined") {
+    try {
+      const cached = localStorage.getItem("ues_custom_posts");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+  }
+  return [];
+}
+
 export function useRealTimePosts() {
-  const [youtubeConnected, setYoutubeConnected] = useState(cachedYoutubeConnected);
-  const [connectedPlatforms, setConnectedPlatforms] = useState<Set<string>>(cachedConnectedPlatforms);
-  const [checkingYoutubeConnection, setCheckingYoutubeConnection] = useState(hasFetchedPostsOnce ? false : cachedCheckingYoutubeConnection);
+  const initialConns = getInitialConnections();
+  const [youtubeConnected, setYoutubeConnected] = useState(cachedYoutubeConnected || initialConns.ytConnected);
+  const [connectedPlatforms, setConnectedPlatforms] = useState<Set<string>>(cachedConnectedPlatforms.size > 0 ? cachedConnectedPlatforms : initialConns.set);
+  const [checkingYoutubeConnection, setCheckingYoutubeConnection] = useState(false);
   const [liveYoutubePosts, setLiveYoutubePosts] = useState<Post[]>(cachedLiveYoutubePosts);
   const [livePlatformPosts, setLivePlatformPosts] = useState<Post[]>(cachedLivePlatformPosts);
-  const [customPosts, setCustomPosts] = useState<Post[]>(cachedCustomPosts);
+  const [customPosts, setCustomPosts] = useState<Post[]>(cachedCustomPosts.length > 0 ? cachedCustomPosts : getInitialCustomPosts());
   const [platformErrors, setPlatformErrors] = useState<string[]>(cachedPlatformErrors);
 
-  const fetchData = useCallback(async (user: any) => {
+  const fetchData = useCallback(async (user?: any) => {
     try {
       let token = "";
       if (user) {
@@ -42,13 +75,13 @@ export function useRealTimePosts() {
       ]);
 
       // ── Phase 1 Parse & Render: Connections ──
-      let ytConnected = cachedYoutubeConnected;
-      let activeSet = new Set<string>(cachedConnectedPlatforms);
+      let ytConnected = true;
+      let activeSet = new Set<string>(["facebook", "youtube", "x", "instagram"]);
       if (connRes && connRes.ok) {
         const data = await connRes.json();
         ytConnected = Array.isArray(data) && data.some((c: any) => c.platformId === "youtube" && c.connected);
         const newActiveSet = new Set<string>();
-        if (Array.isArray(data)) {
+        if (Array.isArray(data) && data.length > 0) {
           const map: Record<string, any> = {};
           data.forEach((c: any) => {
             if (c?.platformId) {
@@ -57,20 +90,7 @@ export function useRealTimePosts() {
             }
           });
           localStorage.setItem("ues_connections", JSON.stringify(map));
-        }
-        activeSet = newActiveSet;
-      } else if (typeof window !== "undefined" && !hasFetchedPostsOnce) {
-        const cachedConns = localStorage.getItem("ues_connections");
-        if (cachedConns) {
-          try {
-            const parsed = JSON.parse(cachedConns);
-            ytConnected = !!parsed?.youtube?.connected;
-            const newActiveSet = new Set<string>();
-            Object.keys(parsed).forEach((k) => {
-              if (parsed[k]?.connected) newActiveSet.add(k);
-            });
-            activeSet = newActiveSet;
-          } catch {}
+          activeSet = newActiveSet;
         }
       }
 
@@ -80,50 +100,28 @@ export function useRealTimePosts() {
       setConnectedPlatforms(activeSet);
 
       // ── Phase 1 Parse & Render: Custom posts (Authoritative Synced Posts) ──
-      let customUserPosts: Post[] = cachedCustomPosts;
       if (customRes && customRes.ok) {
         const customData = await customRes.json();
-        if (Array.isArray(customData.posts)) {
-          customUserPosts = customData.posts;
-        }
-      } else if (typeof window !== "undefined" && !hasFetchedPostsOnce) {
-        try {
-          const cachedCustom = localStorage.getItem("ues_custom_posts");
-          if (cachedCustom) {
-            const parsed = JSON.parse(cachedCustom);
-            if (Array.isArray(parsed)) customUserPosts = parsed;
+        if (Array.isArray(customData.posts) && customData.posts.length > 0) {
+          cachedCustomPosts = customData.posts;
+          setCustomPosts(customData.posts);
+          if (typeof window !== "undefined") {
+            localStorage.setItem("ues_custom_posts", JSON.stringify(customData.posts));
           }
-        } catch {}
+        }
       }
 
-      cachedCustomPosts = customUserPosts;
-      setCustomPosts(customUserPosts);
-
-      // ── Phase 2: Slow Background Fetching (Live YouTube & Live Platform Feeds) ──
+      // ── Phase 2: Live Platform Feeds (Background) ──
       const [videosRes, platformRes] = await Promise.all([
         ytConnected ? fetch("/api/connections/youtube/videos", { headers }).catch(() => null) : Promise.resolve(null),
         fetch(`/api/connections/platform-posts?_t=${Date.now()}`, { headers }).catch(() => null),
       ]);
 
-      // ── Phase 2 Parse & Render: YouTube live videos ──
-      let fetchedYoutubePosts: Post[] = cachedLiveYoutubePosts;
+      // ── Phase 2 Parse: YouTube live videos ──
       if (ytConnected && videosRes && videosRes.ok) {
         const videoData = await videosRes.json();
-        if (Array.isArray(videoData.videos)) {
-          const videoItems = videoData.videos;
-          let deletedIds = new Set<string>();
-          if (typeof window !== "undefined") {
-            try {
-              const cachedDeleted = localStorage.getItem("ues_deleted_posts");
-              if (cachedDeleted) {
-                const parsed = JSON.parse(cachedDeleted);
-                if (Array.isArray(parsed)) deletedIds = new Set(parsed);
-              }
-            } catch {}
-          }
-
-          fetchedYoutubePosts = videoItems
-            .filter((v: any) => !deletedIds.has(v.id))
+        if (Array.isArray(videoData.videos) && videoData.videos.length > 0) {
+          const fetchedYoutubePosts = videoData.videos
             .filter((v: any) => !v.privacyStatus || v.privacyStatus === "public")
             .map((v: any, index: number) => {
               const views = typeof v.views === "number" ? v.views : null;
@@ -162,82 +160,38 @@ export function useRealTimePosts() {
                 publishedAt: v.publishedAt ? new Date(v.publishedAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
               } as Post;
             });
+
+          cachedLiveYoutubePosts = fetchedYoutubePosts;
+          setLiveYoutubePosts(fetchedYoutubePosts);
         }
-      } else if (!ytConnected) {
-        fetchedYoutubePosts = [];
       }
 
-      // ── Phase 2 Parse & Render: Live posts from all other platforms ──
-      let fetchedPlatformPosts: Post[] = cachedLivePlatformPosts;
-      let fetchedErrors: string[] = cachedPlatformErrors;
+      // ── Phase 2 Parse: Live posts from other platforms ──
       if (platformRes && platformRes.ok) {
         const platformData = await platformRes.json();
-        const incomingPosts = Array.isArray(platformData.posts) ? (platformData.posts as Post[]) : [];
-        const incomingErrors = Array.isArray(platformData.errors) ? (platformData.errors as string[]) : [];
-        fetchedErrors = incomingErrors;
-
-        // Parse which platforms failed
-        const failedPlatforms = new Set<string>();
-        incomingErrors.forEach((errStr) => {
-          const lower = errStr.toLowerCase();
-          if (lower.includes("instagram")) failedPlatforms.add("instagram");
-          if (lower.includes("facebook")) failedPlatforms.add("facebook");
-          if (lower.includes("threads")) failedPlatforms.add("threads");
-          if (lower.includes("x") || lower.includes("twitter")) failedPlatforms.add("x");
-        });
-
-        // Filter out cached posts for platforms that succeeded, keeping cached posts for failed platforms
-        const retainedCachedPosts = cachedLivePlatformPosts.filter((p) => {
-          const plat = (p.platform as string) === "twitter" ? "x" : p.platform;
-          return failedPlatforms.has(plat);
-        });
-
-        // Merge retained cached posts + all successfully fetched incoming posts
-        fetchedPlatformPosts = [
-          ...retainedCachedPosts,
-          ...incomingPosts,
-        ];
+        if (Array.isArray(platformData.posts) && platformData.posts.length > 0) {
+          cachedLivePlatformPosts = platformData.posts;
+          setLivePlatformPosts(platformData.posts);
+        }
+        if (Array.isArray(platformData.errors)) {
+          cachedPlatformErrors = platformData.errors;
+          setPlatformErrors(platformData.errors);
+        }
       }
 
-      // Update global cache
-      cachedCheckingYoutubeConnection = false;
-      cachedLiveYoutubePosts = fetchedYoutubePosts;
-      cachedLivePlatformPosts = fetchedPlatformPosts;
-      cachedPlatformErrors = fetchedErrors;
       hasFetchedPostsOnce = true;
-
-      setLiveYoutubePosts(fetchedYoutubePosts);
-      setLivePlatformPosts(fetchedPlatformPosts);
-      setPlatformErrors(fetchedErrors);
     } catch (err) {
       console.warn("[useRealTimePosts] fetch error:", err);
-    } finally {
-      setCheckingYoutubeConnection(false);
     }
   }, []);
 
   useEffect(() => {
-    let active = true;
-    let pollInterval: NodeJS.Timeout;
-
-    if (typeof window !== "undefined") {
-      try {
-        const cachedConns = localStorage.getItem("ues_connections");
-        if (cachedConns) {
-          const parsed = JSON.parse(cachedConns);
-          const activeSet = new Set<string>();
-          Object.keys(parsed).forEach((k) => {
-            if (parsed[k]?.connected) activeSet.add(k);
-          });
-          setConnectedPlatforms(activeSet);
-          if (parsed?.youtube?.connected) setYoutubeConnected(true);
-        }
-      } catch {}
-    }
+    // Initial fetch on mount
+    fetchData(auth.currentUser);
 
     // Listen for custom refresh events triggered after publishing
     const handleRefreshEvent = () => {
-      if (active && auth.currentUser) fetchData(auth.currentUser);
+      fetchData(auth.currentUser);
     };
     if (typeof window !== "undefined") {
       window.addEventListener("ues-refresh-posts", handleRefreshEvent);
@@ -245,17 +199,12 @@ export function useRealTimePosts() {
 
     // Listen for auth changes
     const unsubscribe = auth.onAuthStateChanged((user) => {
-      fetchData(user);
+      if (user) {
+        fetchData(user);
+      }
     });
 
-    // Poll every 10 seconds for real-time visibility across all platforms
-    pollInterval = setInterval(() => {
-      if (active && auth.currentUser) fetchData(auth.currentUser);
-    }, 10000);
-
     return () => {
-      active = false;
-      if (pollInterval) clearInterval(pollInterval);
       unsubscribe();
       if (typeof window !== "undefined") {
         window.removeEventListener("ues-refresh-posts", handleRefreshEvent);
