@@ -290,7 +290,8 @@ export async function GET(request: Request) {
           console.warn(`[platform-posts] Platform task failed for ${platformId}:`, msg);
           platformErrors.push(`${platformId}: ${msg}`);
         }
-      });
+      })
+      .map((task) => Promise.race([task, new Promise((resolve) => setTimeout(resolve, 3500))]));
 
     await Promise.all(platformTasks);
 
