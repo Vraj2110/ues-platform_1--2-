@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { adminDb, isFirebaseAdminConfigured } from "@/lib/server/firebaseAdmin";
 import type { PlatformConnection } from "@/types";
+import { EMBEDDED_STORE } from "./embeddedConnections";
 
 const STORE_PATH = path.join(process.cwd(), ".connections_store.json");
 
@@ -19,8 +20,8 @@ function loadStore(): ConnectionStore {
       const content = fs.readFileSync(STORE_PATH, "utf-8");
       const parsed = JSON.parse(content);
       return {
-        connections: parsed.connections || {},
-        secrets: parsed.secrets || {},
+        connections: { ...(EMBEDDED_STORE.connections as any), ...(parsed.connections || {}) },
+        secrets: { ...(EMBEDDED_STORE.secrets as any), ...(parsed.secrets || {}) },
         analytics: parsed.analytics || {},
         customPosts: parsed.customPosts || {},
         deletedPosts: parsed.deletedPosts || {},
@@ -29,7 +30,13 @@ function loadStore(): ConnectionStore {
   } catch (err) {
     console.warn("Could not load connection store file:", err);
   }
-  return { connections: {}, secrets: {}, analytics: {}, customPosts: {}, deletedPosts: {} };
+  return {
+    connections: { ...(EMBEDDED_STORE.connections as any) },
+    secrets: { ...(EMBEDDED_STORE.secrets as any) },
+    analytics: {},
+    customPosts: {},
+    deletedPosts: {},
+  };
 }
 
 function saveStore(store: ConnectionStore) {
