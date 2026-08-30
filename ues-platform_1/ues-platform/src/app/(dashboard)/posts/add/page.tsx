@@ -290,42 +290,23 @@ export default function AddPostPage() {
           setUploadProgress(20);
 
           try {
-            try {
-              // Try to upload to Firebase Storage first (guarantees that Meta's CDN can download it without blocks)
-              const { ref, uploadBytesResumable, getDownloadURL } = await import("firebase/storage");
-              const storageRef = ref(storage, `posts/${Date.now()}_${fileToUpload.name}`);
-              
-              // Use Resumable upload to show dynamic progress percentage on the UI
-              const uploadTask = uploadBytesResumable(storageRef, fileToUpload);
-              
-              await new Promise<void>((resolve, reject) => {
-                uploadTask.on(
-                  "state_changed",
-                  (snapshot) => {
-                    const pct = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 40) + 25; // 25% to 65%
-                    setUploadProgress(pct);
-                  },
-                  (error) => reject(error),
-                  () => resolve()
-                );
-              });
-
-              setUploadProgress(68);
-              mediaUrl = await getDownloadURL(storageRef);
-              console.log("Uploaded successfully to Firebase Storage:", mediaUrl);
-            } catch (storageErr) {
-              console.warn("Firebase Storage upload failed or timed out, falling back to tmpfiles.org:", storageErr);
-              const formData = new FormData();
-              formData.append("file", fileToUpload as File);
-              const fallbackRes = await fetch("https://tmpfiles.org/api/v1/upload", {
-                method: "POST",
-                body: formData,
-              });
-              if (!fallbackRes.ok) throw new Error("Temporary storage upload failed");
-              const fallbackData = await fallbackRes.json();
-              // Convert to direct download link required by Meta Graph API
-              mediaUrl = fallbackData.data.url.replace("tmpfiles.org/", "tmpfiles.org/dl/");
+            setUploadProgress(30);
+            const formData = new FormData();
+            formData.append("file", fileToUpload);
+            
+            const uploadRes = await fetch("/api/media/upload", {
+              method: "POST",
+              body: formData,
+            });
+            
+            setUploadProgress(60);
+            if (!uploadRes.ok) {
+              const errData = await uploadRes.json();
+              throw new Error(errData.error || "Upload failed");
             }
+            
+            const uploadData = await uploadRes.json();
+            mediaUrl = uploadData.url;
             setUploadProgress(70);
           } catch (err: any) {
             console.error("Upload Error:", err);
