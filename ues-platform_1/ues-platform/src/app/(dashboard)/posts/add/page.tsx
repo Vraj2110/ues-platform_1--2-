@@ -295,12 +295,20 @@ export default function AddPostPage() {
               const { ref, uploadBytes, getDownloadURL } = await import("firebase/storage");
               const storageRef = ref(storage, `posts/${Date.now()}_${fileToUpload.name}`);
               setUploadProgress(30);
-              await uploadBytes(storageRef, fileToUpload);
+
+              const uploadPromise = uploadBytes(storageRef, fileToUpload);
+              const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error("Firebase Storage upload timed out after 8 seconds")), 8000)
+              );
+
+              // Race the upload against the 8-second timeout to prevent hanging at 30%
+              await Promise.race([uploadPromise, timeoutPromise]);
+
               setUploadProgress(60);
               mediaUrl = await getDownloadURL(storageRef);
               console.log("Uploaded successfully to Firebase Storage:", mediaUrl);
             } catch (storageErr) {
-              console.warn("Firebase Storage upload failed, falling back to tmpfiles.org:", storageErr);
+              console.warn("Firebase Storage upload failed or timed out, falling back to tmpfiles.org:", storageErr);
               const formData = new FormData();
               formData.append("file", fileToUpload as File);
               const fallbackRes = await fetch("https://tmpfiles.org/api/v1/upload", {
