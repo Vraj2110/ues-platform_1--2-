@@ -42,10 +42,35 @@ function getInitialCustomPosts(): Post[] {
       if (cached) {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // Filter out legacy static mock posts (p1..p7)
           const filtered = parsed.filter((p: any) => !p.id?.match(/^p[1-9]$/));
           if (filtered.length > 0) return filtered;
         }
+      }
+    } catch {}
+  }
+  return [];
+}
+
+function getInitialLivePlatformPosts(): Post[] {
+  if (typeof window !== "undefined") {
+    try {
+      const cached = localStorage.getItem("ues_live_platform_posts");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+  }
+  return [];
+}
+
+function getInitialYoutubePosts(): Post[] {
+  if (typeof window !== "undefined") {
+    try {
+      const cached = localStorage.getItem("ues_live_youtube_posts");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
     } catch {}
   }
@@ -57,8 +82,8 @@ export function useRealTimePosts() {
   const [youtubeConnected, setYoutubeConnected] = useState(cachedYoutubeConnected || initialConns.ytConnected);
   const [connectedPlatforms, setConnectedPlatforms] = useState<Set<string>>(cachedConnectedPlatforms.size > 0 ? cachedConnectedPlatforms : initialConns.set);
   const [checkingYoutubeConnection, setCheckingYoutubeConnection] = useState(false);
-  const [liveYoutubePosts, setLiveYoutubePosts] = useState<Post[]>(cachedLiveYoutubePosts);
-  const [livePlatformPosts, setLivePlatformPosts] = useState<Post[]>(cachedLivePlatformPosts);
+  const [liveYoutubePosts, setLiveYoutubePosts] = useState<Post[]>(cachedLiveYoutubePosts.length > 0 ? cachedLiveYoutubePosts : getInitialYoutubePosts());
+  const [livePlatformPosts, setLivePlatformPosts] = useState<Post[]>(cachedLivePlatformPosts.length > 0 ? cachedLivePlatformPosts : getInitialLivePlatformPosts());
   const [customPosts, setCustomPosts] = useState<Post[]>(cachedCustomPosts.length > 0 ? cachedCustomPosts : getInitialCustomPosts());
   const [platformErrors, setPlatformErrors] = useState<string[]>(cachedPlatformErrors);
 
@@ -170,6 +195,9 @@ export function useRealTimePosts() {
 
           cachedLiveYoutubePosts = fetchedYoutubePosts;
           setLiveYoutubePosts(fetchedYoutubePosts);
+          if (typeof window !== "undefined") {
+            localStorage.setItem("ues_live_youtube_posts", JSON.stringify(fetchedYoutubePosts));
+          }
         }
       }
 
@@ -179,6 +207,9 @@ export function useRealTimePosts() {
         if (Array.isArray(platformData.posts) && platformData.posts.length > 0) {
           cachedLivePlatformPosts = platformData.posts;
           setLivePlatformPosts(platformData.posts);
+          if (typeof window !== "undefined") {
+            localStorage.setItem("ues_live_platform_posts", JSON.stringify(platformData.posts));
+          }
         }
         if (Array.isArray(platformData.errors)) {
           cachedPlatformErrors = platformData.errors;
