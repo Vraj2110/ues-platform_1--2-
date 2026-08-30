@@ -211,7 +211,22 @@ export async function GET(request: Request) {
       }
       const refreshToken = tokenResponse.refresh_token; // may be absent
       const profile = await fetchFacebookProfile(accessToken);
-      const connection = normalizeConnection("facebook", profile);
+
+      let pageName = profile?.name || "Facebook Page";
+      let pageId = profile?.id;
+      if (profile.accounts?.data && profile.accounts.data.length > 0) {
+        pageName = `${profile.accounts.data[0].name} (Page)`;
+        pageId = profile.accounts.data[0].id;
+      }
+
+      const connection = {
+        platformId: "facebook" as const,
+        connected: true,
+        provider: "facebook",
+        accountName: pageName,
+        accountId: pageId,
+        lastSync: new Date().toISOString(),
+      };
       await setUserConnection(uid, "facebook", connection);
       await setUserConnectionSecrets(uid, "facebook", {
         accessToken,
