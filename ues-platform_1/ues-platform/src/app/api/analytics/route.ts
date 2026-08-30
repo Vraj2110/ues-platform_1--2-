@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { verifyIdToken } from "@/lib/server/auth";
 import { getUserConnections, getCustomUserPosts, getUserConnectionSecrets } from "@/lib/server/connections";
 import { AnalyticsService } from "@/lib/server/analyticsService";
-import { fetchInstagramRecentMedia, fetchFacebookRecentPosts } from "@/lib/server/oauth";
+import { fetchInstagramRecentMedia, fetchFacebookRecentPosts, fetchYouTubeRecentVideos, getMockYouTubeVideos, fetchYouTubeChannel } from "@/lib/server/oauth";
 import { calculateUnifiedEngagement } from "@/lib/server/uesService";
 
 export const dynamic = "force-dynamic";
@@ -99,6 +99,44 @@ export async function GET(request: Request) {
                 metrics: { ...metricsData, engagementRate },
                 uesScore: score,
                 publishedAt: item.publishedAt ? new Date(item.publishedAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+              });
+            });
+          }
+        } catch {}
+      }
+
+      // Ingest YouTube Videos
+      const ytSecrets = await getUserConnectionSecrets(uid, "youtube");
+      if (ytSecrets?.accessToken) {
+        try {
+          let ytVideos = await fetchYouTubeRecentVideos(ytSecrets.accessToken as string, ytSecrets.refreshToken as string, 25).catch(() => null);
+          if (Array.isArray(ytVideos)) {
+            ytVideos.forEach((v: any) => {
+              const metricsData = {
+                likes: v.likes || null,
+                comments: v.comments || null,
+                shares: null,
+                views: v.views || null,
+                saves: null,
+                reach: null,
+                impressions: null,
+                followerCount: (v as any).followerCount || 2300,
+                dataSource: "youtube_api",
+                syncStatus: "success" as const,
+              };
+              const { score, engagementRate } = calculateUnifiedEngagement(metricsData);
+              livePosts.push({
+                id: `yt-live-${v.id}`,
+                platform: "youtube",
+                title: v.title || "YouTube Channel Video",
+                thumbnailUrl: v.thumbnailUrl || undefined,
+                url: v.id ? `https://www.youtube.com/watch?v=${v.id}` : undefined,
+                type: "video",
+                status: "active",
+                privacyStatus: "public",
+                metrics: { ...metricsData, engagementRate },
+                uesScore: score,
+                publishedAt: v.publishedAt ? new Date(v.publishedAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
               });
             });
           }
