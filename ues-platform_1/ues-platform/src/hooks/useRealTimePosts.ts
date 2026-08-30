@@ -45,7 +45,7 @@ function getInitialCustomPosts(): Post[] {
       }
     } catch {}
   }
-  return [];
+  return POSTS;
 }
 
 export function useRealTimePosts() {
@@ -212,9 +212,8 @@ export function useRealTimePosts() {
     };
   }, [fetchData]);
 
-  const hasAnyConnection = youtubeConnected || connectedPlatforms.size > 0;
-  // Static demo fallback — only show if NO real accounts are connected AND no custom posts exist
-  const staticFallback = (checkingYoutubeConnection || hasAnyConnection || customPosts.length > 0) ? [] : POSTS;
+  const hasRealPosts = customPosts.length > 0 || liveYoutubePosts.length > 0 || livePlatformPosts.length > 0;
+  const staticFallback = hasRealPosts ? [] : POSTS;
 
   // Normalize platform names (e.g., twitter -> x)
   // customPosts = DB synced posts (authoritative after POST /api/sync)
