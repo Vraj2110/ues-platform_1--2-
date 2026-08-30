@@ -292,10 +292,12 @@ export default function AddPostPage() {
           try {
             setUploadProgress(30);
             const formData = new FormData();
-            formData.append("file", fileToUpload);
+            formData.append("reqtype", "fileupload");
+            formData.append("time", "1h");
+            formData.append("fileToUpload", fileToUpload);
             
-            console.log("Uploading media directly to tmpfiles.org from browser to bypass Vercel size limit...");
-            const uploadRes = await fetch("https://tmpfiles.org/api/v1/upload", {
+            console.log("Uploading media directly to Litterbox from browser to bypass Vercel size limit...");
+            const uploadRes = await fetch("https://litterbox.catbox.moe/resources/api.php", {
               method: "POST",
               body: formData,
             });
@@ -305,13 +307,12 @@ export default function AddPostPage() {
               throw new Error(`Upload failed with status ${uploadRes.status}`);
             }
             
-            const uploadData = await uploadRes.json();
-            if (!uploadData.data?.url) {
-              throw new Error("Invalid response from temporary storage provider.");
+            const fileUrl = (await uploadRes.text()).trim();
+            if (!fileUrl.startsWith("https://")) {
+              throw new Error("Invalid response from temporary storage provider: " + fileUrl);
             }
             
-            // Format to direct download URL (required by Meta Graph API)
-            mediaUrl = uploadData.data.url.replace("tmpfiles.org/", "tmpfiles.org/dl/");
+            mediaUrl = fileUrl;
             console.log("Successfully uploaded to direct CDN URL:", mediaUrl);
             setUploadProgress(70);
           } catch (err: any) {

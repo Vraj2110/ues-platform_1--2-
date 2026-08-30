@@ -29,40 +29,49 @@ export async function POST(request: Request) {
           },
         });
 
-        // Make the file publicly readable so Facebook/Instagram CDNs can fetch it
-        await fileRef.makePublic();
+        let publicUrl = `https://storage.googleapis.com/${bucket.name}/${filename}`;
+        try {
+          // Make the file publicly readable so Facebook/Instagram CDNs can fetch it
+          await fileRef.makePublic();
+          console.log("Successfully made GCS file public. URL:", publicUrl);
+        } catch (pubErr: any) {
+          console.warn("GCS makePublic failed (potentially due to Uniform bucket access). Generating Signed URL fallback...", pubErr?.message || pubErr);
+          const [signedUrl] = await fileRef.getSignedUrl({
+            action: 'read',
+            expires: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days expiration
+          });
+          publicUrl = signedUrl;
+          console.log("Successfully generated GCS Signed URL fallback. URL:", publicUrl);
+        }
         
-        // Google Cloud Storage public URL format
-        const publicUrl = `https://storage.googleapis.com/${bucket.name}/${filename}`;
-        console.log("Successfully uploaded to Firebase Storage (Admin):", publicUrl);
         return NextResponse.json({ url: publicUrl });
       } catch (storageErr: any) {
-        console.warn("Firebase Admin Storage upload failed, falling back to tmpfiles.org:", storageErr?.message || storageErr);
+        console.warn("Firebase Admin Storage upload failed, falling back to Litterbox:", storageErr?.message || storageErr);
       }
     }
 
-    // 2. Fallback to tmpfiles.org (reliable, no CORS/Precondition block)
+    // 2. Fallback to Litterbox (highly reliable, returns direct download URL with range request support)
     const uploadForm = new FormData();
-    uploadForm.append("file", new Blob([buffer], { type: file.type }), file.name);
+    uploadForm.append("reqtype", "fileupload");
+    uploadForm.append("time", "1h");
+    uploadForm.append("fileToUpload", new Blob([buffer], { type: file.type }), file.name);
 
-    console.log("Uploading file to tmpfiles.org from server side...", file.name, file.size);
-    const response = await fetch("https://tmpfiles.org/api/v1/upload", {
+    console.log("Uploading file to Litterbox from server side...", file.name, file.size);
+    const response = await fetch("https://litterbox.catbox.moe/resources/api.php", {
       method: "POST",
       body: uploadForm,
     });
 
     if (!response.ok) {
-      throw new Error(`tmpfiles.org upload failed with status ${response.status}`);
+      throw new Error(`Litterbox upload failed with status ${response.status}`);
     }
 
-    const resData = await response.json();
-    if (!resData.data?.url) {
-      throw new Error(`tmpfiles.org returned invalid response structure: ${JSON.stringify(resData)}`);
+    const fileUrl = (await response.text()).trim();
+    if (!fileUrl.startsWith("https://")) {
+      throw new Error(`Litterbox returned invalid response: ${fileUrl}`);
     }
 
-    // Convert to direct download link required by Meta Graph API
-    const fileUrl = resData.data.url.replace("tmpfiles.org/", "tmpfiles.org/dl/");
-    console.log("Successfully uploaded to tmpfiles.org:", fileUrl);
+    console.log("Successfully uploaded to Litterbox:", fileUrl);
     return NextResponse.json({ url: fileUrl });
   } catch (err: any) {
     console.error("Upload API Error:", err);
