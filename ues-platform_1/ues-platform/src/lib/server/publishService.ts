@@ -212,16 +212,15 @@ export async function publishToFacebook(
       !finalMediaUrl.includes("localhost") &&
       finalMediaUrl.startsWith("http")
     ) {
-      endpoint = `https://graph.facebook.com/v19.0/${targetId}/photos`;
-      const params = new URLSearchParams();
-      params.append("access_token", pageToken);
-      params.append("url", finalMediaUrl);
-      params.append("caption", text);
-      params.append("published", "true");
+      const urlParams = new URLSearchParams({
+        access_token: pageToken,
+        url: finalMediaUrl,
+        caption: text,
+        published: "true"
+      });
+      endpoint = `https://graph.facebook.com/v19.0/${targetId}/photos?${urlParams.toString()}`;
       requestOptions = {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: params,
+        method: "POST"
       };
 
     // ── Video via reliable public URL ──
@@ -231,16 +230,15 @@ export async function publishToFacebook(
       !finalMediaUrl.includes("localhost") &&
       finalMediaUrl.startsWith("http")
     ) {
-      endpoint = `https://graph.facebook.com/v19.0/${targetId}/videos`;
-      const params = new URLSearchParams();
-      params.append("access_token", pageToken);
-      params.append("file_url", finalMediaUrl);
-      params.append("description", text);
-      params.append("published", "true");
+      const urlParams = new URLSearchParams({
+        access_token: pageToken,
+        file_url: finalMediaUrl,
+        description: text,
+        published: "true"
+      });
+      endpoint = `https://graph.facebook.com/v19.0/${targetId}/videos?${urlParams.toString()}`;
       requestOptions = {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: params,
+        method: "POST"
       };
 
 
