@@ -225,8 +225,9 @@ export async function POST(request: Request) {
     const createData = await createRes.json();
 
     if (!createRes.ok) {
+      console.warn("Instagram Media Container Creation Failed:", JSON.stringify(createData));
       const errorMsg = createData.error?.message || "Failed to create media container.";
-      const isAuthError = createRes.status === 401 || createData.error?.code === 190 || createData.error?.type === "OAuthException";
+      const isAuthError = createRes.status === 401 || createData.error?.code === 190 || createData.error?.error_subcode === 463 || createData.error?.error_subcode === 467;
       
       if (isAuthError) {
         return NextResponse.json({

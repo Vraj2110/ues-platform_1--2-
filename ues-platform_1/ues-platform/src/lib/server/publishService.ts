@@ -5,17 +5,17 @@ export async function getMetaCompatibleUrl(mediaUrl: string, mediaType: "image" 
     return mediaUrl;
   }
 
-  console.log(`[Meta URL Helper] Processing tmpfiles.org URL for Meta: ${mediaUrl}`);
+  console.log(`[Meta URL Helper] Processing tmpfiles.org URL for Meta: ${mediaUrl} (${mediaType})`);
   try {
     let actualDownloadUrl = mediaUrl;
     if (!actualDownloadUrl.includes("tmpfiles.org/dl/")) {
       actualDownloadUrl = actualDownloadUrl.replace("tmpfiles.org/", "tmpfiles.org/dl/");
     }
 
-    // 1. Fetch the viewer HTML to extract the real direct download link
+    // 1. Fetch the viewer HTML to extract the real direct download link with session token
     const viewerUrl = actualDownloadUrl.replace('/dl/', '/');
     const viewerRes = await fetch(viewerUrl, {
-      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" }
     });
 
     if (viewerRes.ok) {
@@ -23,13 +23,19 @@ export async function getMetaCompatibleUrl(mediaUrl: string, mediaType: "image" 
       const match = html.match(/href="(https:\/\/tmpfiles\.org\/dl\/[^"]+)"/);
       if (match && match[1]) {
         actualDownloadUrl = match[1];
-        console.log("[Meta URL Helper] Extracted true download URL:", actualDownloadUrl);
+        console.log("[Meta URL Helper] Extracted true download URL with session token:", actualDownloadUrl);
       }
     }
 
-    // 2. Fetch the file buffer
+    // For videos: the extracted direct session URL on tmpfiles.org serves 206 Partial Content with Content-Range directly to Meta crawlers
+    if (mediaType === "video") {
+      console.log("[Meta URL Helper] Using direct stream URL for Meta video ingestion:", actualDownloadUrl);
+      return actualDownloadUrl;
+    }
+
+    // For images: download buffer and re-host on freeimage.host to guarantee 100% Meta crawler reliability
     const fileRes = await fetch(actualDownloadUrl, {
-      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" }
     });
     if (!fileRes.ok) {
       throw new Error(`Failed to download file from tmpfiles: ${fileRes.statusText}`);
@@ -37,22 +43,16 @@ export async function getMetaCompatibleUrl(mediaUrl: string, mediaType: "image" 
 
     const arrayBuffer = await fileRes.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-    const contentType = fileRes.headers.get("content-type") || (mediaType === "video" ? "video/mp4" : "image/jpeg");
-    const extension = mediaType === "video" ? "mp4" : "jpg";
-    const filename = `rehosted_${Date.now()}.${extension}`;
 
-    // 3. Try Firebase Storage if configured
-    const { adminStorage, isFirebaseAdminConfigured } = require("@/lib/server/firebaseAdmin");
-    if (isFirebaseAdminConfigured) {
-      try {
-        console.log("[Meta URL Helper] Re-hosting tmpfiles.org media to Firebase Storage...");
+    // Try Firebase Storage first if configured
+    try {
+      const { adminStorage, isFirebaseAdminConfigured } = require("@/lib/server/firebaseAdmin");
+      if (isFirebaseAdminConfigured) {
         const bucket = adminStorage.bucket();
-        const firebaseFilename = `posts/${filename}`;
+        const firebaseFilename = `posts/${Date.now()}_image.jpg`;
         const fileRef = bucket.file(firebaseFilename);
 
-        await fileRef.save(buffer, {
-          metadata: { contentType },
-        });
+        await fileRef.save(buffer, { metadata: { contentType: "image/jpeg" } });
 
         let publicUrl = `https://storage.googleapis.com/${bucket.name}/${firebaseFilename}`;
         try {
@@ -64,36 +64,35 @@ export async function getMetaCompatibleUrl(mediaUrl: string, mediaType: "image" 
           });
           publicUrl = signedUrl;
         }
-        console.log("[Meta URL Helper] Successfully re-hosted to Firebase:", publicUrl);
+        console.log("[Meta URL Helper] Successfully re-hosted image to Firebase:", publicUrl);
         return publicUrl;
-      } catch (fbErr) {
-        console.warn("[Meta URL Helper] Firebase re-hosting failed, falling back to Litterbox:", fbErr);
+      }
+    } catch (fbErr) {
+      console.warn("[Meta URL Helper] Firebase image re-hosting notice:", fbErr);
+    }
+
+    // Re-host image to freeimage.host
+    console.log("[Meta URL Helper] Re-hosting image to freeimage.host...");
+    const form = new URLSearchParams();
+    form.append('key', '6d207e02198a847aa98d0a2a901485a5');
+    form.append('action', 'upload');
+    form.append('source', buffer.toString('base64'));
+    form.append('format', 'json');
+
+    const fiRes = await fetch('https://freeimage.host/api/1/upload', {
+      method: 'POST',
+      body: form,
+    });
+
+    if (fiRes.ok) {
+      const fiData = await fiRes.json();
+      if (fiData.image?.url) {
+        console.log("[Meta URL Helper] Successfully re-hosted image to freeimage.host:", fiData.image.url);
+        return fiData.image.url;
       }
     }
 
-    // 4. Fallback: Upload to Litterbox server-side (no CORS issue)
-    console.log("[Meta URL Helper] Re-hosting tmpfiles.org media to Litterbox...");
-    const uploadForm = new FormData();
-    uploadForm.append("reqtype", "fileupload");
-    uploadForm.append("time", "1h");
-    uploadForm.append("fileToUpload", new Blob([buffer], { type: contentType }), filename);
-
-    const response = await fetch("https://litterbox.catbox.moe/resources/api.php", {
-      method: "POST",
-      body: uploadForm,
-    });
-
-    if (!response.ok) {
-      throw new Error(`Litterbox upload failed with status ${response.status}`);
-    }
-
-    const fileUrl = (await response.text()).trim();
-    if (!fileUrl.startsWith("https://")) {
-      throw new Error(`Litterbox returned invalid response: ${fileUrl}`);
-    }
-
-    console.log("[Meta URL Helper] Successfully re-hosted to Litterbox:", fileUrl);
-    return fileUrl;
+    return actualDownloadUrl;
   } catch (err: any) {
     console.error("[Meta URL Helper] Error re-hosting media:", err);
     return mediaUrl;
