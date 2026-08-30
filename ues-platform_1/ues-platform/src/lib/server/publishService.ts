@@ -170,14 +170,17 @@ export async function publishToFacebook(
         }
       } else {
         const txt = await pagesResponse.text();
-        return { success: false, error: `Facebook API error: Failed to fetch accounts. Details: ${txt}` };
+        console.warn(`[Facebook API] Failed to fetch accounts list: ${txt}. Using direct fallback token.`);
       }
     } catch (err: any) {
-      return { success: false, error: `Facebook Connection error: ${err.message}` };
+      console.warn("Facebook Connection error, using direct fallback token:", err);
     }
 
     if (!hasPages) {
-      return { success: false, error: "No connected Facebook Pages found. You must own a Facebook Page and grant permissions for it during the connection flow." };
+      // Fallback: If no pages are found, assume the token is already a Page Access Token and target is /me
+      console.log("[Facebook API] No connected pages resolved. Falling back to direct /me token publishing.");
+      pageToken = accessToken;
+      targetId = "me";
     }
 
     let endpoint: string;
