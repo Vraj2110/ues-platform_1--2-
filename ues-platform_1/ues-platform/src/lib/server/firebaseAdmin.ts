@@ -34,6 +34,7 @@ if (projectId && clientEmail && privateKey) {
             clientEmail,
             privateKey,
           }),
+          storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || `${projectId}.appspot.com`,
         })
       : admin.app();
   } catch (error: any) {
@@ -65,3 +66,4 @@ function makeMissingProxy(name: string) {
 export const isFirebaseAdminConfigured = Boolean(app);
 export const adminAuth: any = app ? app.auth() : makeMissingProxy("adminAuth");
 export const adminDb: any = app ? app.firestore() : makeMissingProxy("adminDb");
+export const adminStorage: any = app ? admin.storage() : makeMissingProxy("adminStorage");
