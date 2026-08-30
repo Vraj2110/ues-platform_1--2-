@@ -41,11 +41,15 @@ function getInitialCustomPosts(): Post[] {
       const cached = localStorage.getItem("ues_custom_posts");
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Filter out legacy static mock posts (p1..p7)
+          const filtered = parsed.filter((p: any) => !p.id?.match(/^p[1-9]$/));
+          if (filtered.length > 0) return filtered;
+        }
       }
     } catch {}
   }
-  return POSTS;
+  return [];
 }
 
 export function useRealTimePosts() {
@@ -102,11 +106,14 @@ export function useRealTimePosts() {
       // ── Phase 1 Parse & Render: Custom posts (Authoritative Synced Posts) ──
       if (customRes && customRes.ok) {
         const customData = await customRes.json();
-        if (Array.isArray(customData.posts) && customData.posts.length > 0) {
-          cachedCustomPosts = customData.posts;
-          setCustomPosts(customData.posts);
-          if (typeof window !== "undefined") {
-            localStorage.setItem("ues_custom_posts", JSON.stringify(customData.posts));
+        if (Array.isArray(customData.posts)) {
+          const realCustomPosts = customData.posts.filter((p: any) => !p.id?.match(/^p[1-9]$/));
+          if (realCustomPosts.length > 0) {
+            cachedCustomPosts = realCustomPosts;
+            setCustomPosts(realCustomPosts);
+            if (typeof window !== "undefined") {
+              localStorage.setItem("ues_custom_posts", JSON.stringify(realCustomPosts));
+            }
           }
         }
       }
