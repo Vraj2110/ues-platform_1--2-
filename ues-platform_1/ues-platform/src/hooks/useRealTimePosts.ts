@@ -186,12 +186,15 @@ export function useRealTimePosts() {
   }, []);
 
   useEffect(() => {
+    let active = true;
+    let pollTimer: NodeJS.Timeout;
+
     // Initial fetch on mount
     fetchData(auth.currentUser);
 
     // Listen for custom refresh events triggered after publishing
     const handleRefreshEvent = () => {
-      fetchData(auth.currentUser);
+      if (active) fetchData(auth.currentUser);
     };
     if (typeof window !== "undefined") {
       window.addEventListener("ues-refresh-posts", handleRefreshEvent);
@@ -199,12 +202,21 @@ export function useRealTimePosts() {
 
     // Listen for auth changes
     const unsubscribe = auth.onAuthStateChanged((user) => {
-      if (user) {
+      if (active) {
         fetchData(user);
       }
     });
 
+    // Real-time polling every 25 seconds
+    pollTimer = setInterval(() => {
+      if (active) {
+        fetchData(auth.currentUser);
+      }
+    }, 25000);
+
     return () => {
+      active = false;
+      if (pollTimer) clearInterval(pollTimer);
       unsubscribe();
       if (typeof window !== "undefined") {
         window.removeEventListener("ues-refresh-posts", handleRefreshEvent);
