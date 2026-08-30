@@ -250,14 +250,9 @@ export async function publishToFacebook(
   try {
     let pageToken = accessToken;
     let targetId = "me";
-
-    let finalMediaUrl = mediaUrl;
-    if (finalMediaUrl) {
-      finalMediaUrl = await getMetaCompatibleUrl(finalMediaUrl, mediaType || "image");
-    }
-
-    // Try to get a Page token — required for posting to Pages
     let hasPages = false;
+
+    // 1. Resolve Facebook Page Access Token (Meta requires a Page to publish)
     try {
       const pagesResponse = await fetch(`https://graph.facebook.com/v19.0/me/accounts?access_token=${accessToken}`);
       if (pagesResponse.ok) {
@@ -266,26 +261,31 @@ export async function publishToFacebook(
           pageToken = pagesData.data[0].access_token || accessToken;
           targetId = pagesData.data[0].id;
           hasPages = true;
+          console.log(`[Facebook API] Using Facebook Page ID: ${targetId} (${pagesData.data[0].name || "Page"})`);
         }
       } else {
         const txt = await pagesResponse.text();
-        console.warn(`[Facebook API] Failed to fetch accounts list: ${txt}. Using direct fallback token.`);
+        console.warn(`[Facebook API] Failed to fetch accounts list: ${txt}`);
       }
     } catch (err: any) {
-      console.warn("Facebook Connection error, using direct fallback token:", err);
+      console.warn("[Facebook API] Page accounts list error:", err);
     }
 
     if (!hasPages) {
-      // Fallback: If no pages are found, assume the token is already a Page Access Token and target is /me
-      console.log("[Facebook API] No connected pages resolved. Falling back to direct /me token publishing.");
+      console.log("[Facebook API] No Facebook Pages found for this account. Fallback to /me token.");
       pageToken = accessToken;
       targetId = "me";
+    }
+
+    let finalMediaUrl = mediaUrl;
+    if (finalMediaUrl) {
+      finalMediaUrl = await getMetaCompatibleUrl(finalMediaUrl, mediaType || "image");
     }
 
     let endpoint: string;
     let requestOptions: RequestInit;
 
-    // ── Image upload: raw binary takes priority (no CDN needed) ──
+    // ── Image upload: raw binary takes priority ──
     if (rawFileBuffer && rawFileMime && !rawFileMime.startsWith("video/")) {
       endpoint = `https://graph.facebook.com/v19.0/${targetId}/photos`;
       const formData = new FormData();
@@ -333,15 +333,13 @@ export async function publishToFacebook(
         access_token: pageToken,
         file_url: finalMediaUrl,
         description: text,
-        published: "true"
       });
       endpoint = `https://graph.facebook.com/v19.0/${targetId}/videos?${urlParams.toString()}`;
       requestOptions = {
         method: "POST"
       };
 
-
-    // ── Text-only post (fallback) ──
+    // ── Text-only post ──
     } else {
       endpoint = `https://graph.facebook.com/v19.0/${targetId}/feed`;
       requestOptions = {
@@ -354,45 +352,23 @@ export async function publishToFacebook(
     const response = await fetch(endpoint, requestOptions);
     const data = await response.json();
 
-    if (response.status === 401 || (data.error?.type === "OAuthException" && data.error?.code === 190)) {
+    if (response.status === 401 || (data.error?.code === 190 || data.error?.error_subcode === 463 || data.error?.error_subcode === 467)) {
       return { success: false, error: "Facebook token expired. Please reconnect your Facebook account." };
     }
     if (response.status === 429 || data.error?.code === 17) {
       return { success: false, error: "Facebook rate limit reached.", rateLimited: true };
     }
-    if (data.error?.code === 100 || data.error?.code === 200) {
-      return { success: false, error: `Facebook API error: ${data.error.message || "Invalid parameter"}. Ensure your Facebook app has "pages_manage_posts" permission and you are a Page admin.` };
+    if (!hasPages && (data.error?.code === 100 || data.error?.code === 200)) {
+      return {
+        success: false,
+        error: `Facebook API requires a Facebook Page to publish posts (${data.error.message || "No Page linked"}). Please create a Page on Facebook or connect with Demo Mode.`
+      };
     }
     if (!response.ok) {
-      // If we failed to publish with media (e.g. due to blocked URL/crawler error),
-      // we attempt a resilient fallback to a text-only feed post so the text is at least uploaded!
-      if (finalMediaUrl) {
-        console.warn("Facebook media publishing failed. Falling back to text-only feed post...");
-        const fallbackEndpoint = `https://graph.facebook.com/v19.0/${targetId}/feed`;
-        const fallbackText = `${text}\n\n[Media Link: ${finalMediaUrl}]`;
-        try {
-          const fallbackRes = await fetch(fallbackEndpoint, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ access_token: pageToken, message: fallbackText }),
-          });
-          const fallbackData = await fallbackRes.json();
-          if (fallbackRes.ok) {
-            const finalPostId = fallbackData.id && String(fallbackData.id).includes("_") ? String(fallbackData.id) : `${targetId}_${fallbackData.id}`;
-            return {
-              success: true,
-              platformPostId: finalPostId,
-              url: `https://facebook.com/${finalPostId}`,
-            };
-          }
-        } catch (fallbackErr) {
-          console.error("Facebook fallback posting failed:", fallbackErr);
-        }
-      }
-      return { success: false, error: data.error?.message || "Failed to publish to Facebook" };
+      return { success: false, error: data.error?.message || "Failed to publish to Facebook." };
     }
 
-    const finalPostId = data.id && String(data.id).includes("_") ? String(data.id) : `${targetId}_${data.id}`;
+    const finalPostId = data.id && String(data.id).includes("_") ? String(data.id) : `${targetId}_${data.id || data.post_id || Date.now()}`;
     return {
       success: true,
       platformPostId: finalPostId,

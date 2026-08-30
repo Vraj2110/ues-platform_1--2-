@@ -320,64 +320,24 @@ export async function POST(request: Request) {
 
       if (!isMock && accessToken) {
         const fbText = description ? `${title.trim()}\n\n${description}` : title.trim();
-
-        // Re-host tmpfiles.org image to freeimage.host for Facebook so Meta's CDN can fetch it safely
-        let finalMediaUrl = mediaUrl || thumbnailUrl;
-        if (finalMediaUrl && finalMediaUrl.includes("tmpfiles.org") && !finalMediaUrl.includes("tmpfiles.org/dl/")) {
-          finalMediaUrl = finalMediaUrl.replace("tmpfiles.org/", "tmpfiles.org/dl/");
-        }
-
-        if (finalMediaUrl && finalMediaUrl.includes("tmpfiles.org") && mediaType === "image") {
-          console.log("Re-hosting Facebook image from tmpfiles.org to freeimage.host...", finalMediaUrl);
-          try {
-            const actualDownloadUrl = finalMediaUrl;
-            const tmpFileRes = await fetch(actualDownloadUrl, {
-              headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
-            });
-            if (tmpFileRes.ok) {
-              const arrayBuffer = await tmpFileRes.arrayBuffer();
-              const base64Data = Buffer.from(arrayBuffer).toString('base64');
-              const form = new URLSearchParams();
-              form.append('key', '6d207e02198a847aa98d0a2a901485a5');
-              form.append('action', 'upload');
-              form.append('source', base64Data);
-              form.append('format', 'json');
-              const fiRes = await fetch('https://freeimage.host/api/1/upload', {
-                method: 'POST',
-                body: form,
-              });
-              if (fiRes.ok) {
-                const fiData = await fiRes.json();
-                if (fiData.image?.url) {
-                  finalMediaUrl = fiData.image.url;
-                  console.log("Facebook image successfully re-hosted:", finalMediaUrl);
-                }
-              }
-            }
-          } catch (err) {
-            console.error("Failed to re-host Facebook image:", err);
-          }
-        }
+        const finalMediaUrl = mediaUrl || thumbnailUrl;
 
         const result = await publishToFacebook(
           accessToken,
           fbText,
           finalMediaUrl || undefined,
           mediaType || (finalMediaUrl ? "image" : undefined),
-          undefined,
-          undefined,
-          undefined,
         );
 
         if (result.success) {
           const postObj = {
             id: `fb-live-${result.platformPostId}`,
-            platform: "facebook",
+            platform: "facebook" as const,
             title: fbText.slice(0, 120),
             description: description || "",
             url: result.url,
-            type: mediaType === "video" ? "video" : (finalMediaUrl ? "photo" : "post"),
-            status: "active",
+            type: mediaType === "video" ? ("video" as const) : (finalMediaUrl ? ("photo" as const) : ("post" as const)),
+            status: "active" as const,
             privacyStatus: "public",
             category: "Social",
             thumbnailUrl: mediaType === "image" ? (finalMediaUrl || "") : "",
@@ -386,6 +346,7 @@ export async function POST(request: Request) {
             publishedAt: postDate,
             _addedAt: Date.now(),
           };
+          try { saveCustomUserPost(uid, postObj); } catch (e) { console.warn("Save error:", e); }
           return NextResponse.json({
             success: true,
             message: "✓ Post published successfully to Facebook!",
