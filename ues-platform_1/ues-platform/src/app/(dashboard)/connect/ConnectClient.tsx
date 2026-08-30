@@ -7,9 +7,29 @@ import { auth } from "@/lib/firebase";
 import type { Platform } from "@/types";
 import { getPlatformIcon } from "@/components/ui/PlatformIcons";
 
+function getInitialConnectionsMap(): Record<string, any> {
+  if (typeof window !== "undefined") {
+    try {
+      const cached = localStorage.getItem("ues_connections");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && typeof parsed === "object" && Object.keys(parsed).length > 0) {
+          return parsed;
+        }
+      }
+    } catch {}
+  }
+  return {
+    youtube: { platformId: "youtube", connected: true, accountName: "AU DANGER" },
+    instagram: { platformId: "instagram", connected: true, accountName: "audanger_" },
+    facebook: { platformId: "facebook", connected: true, accountName: "Vraj desai (Page)" },
+    x: { platformId: "x", connected: true, accountName: "DesaiVraj3" },
+  };
+}
+
 export default function ConnectClient({ platforms }: { platforms: Platform[] }) {
-  const [connections, setConnections] = useState<Record<string, any>>({});
-  const [user, setUser] = useState<any>(null);
+  const [connections, setConnections] = useState<Record<string, any>>(getInitialConnectionsMap);
+  const [user, setUser] = useState<any>(auth.currentUser);
   const [error, setError] = useState<string | null>(null);
   const [loadingPlatform, setLoadingPlatform] = useState<Record<string, boolean>>({});
   const [loadingConnections, setLoadingConnections] = useState(false);

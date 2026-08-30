@@ -3,11 +3,11 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import ConnectClient from "./ConnectClient";
 import type { Platform } from "@/types";
 
-// This data is often in a shared file like /lib/data.ts, but is defined here for clarity.
 const PLATFORMS: Platform[] = [
-  { id: 'youtube', name: 'YouTube', icon: '📺', color: 'bg-red-500', connected: false },
-  { id: 'instagram', name: 'Instagram', icon: '📸', color: 'bg-pink-500', connected: false },
-  { id: 'facebook', name: 'Facebook', icon: '👍', color: 'bg-indigo-600', connected: false },
+  { id: 'youtube', name: 'YouTube', icon: '📺', color: 'bg-red-500', connected: true },
+  { id: 'instagram', name: 'Instagram', icon: '📸', color: 'bg-pink-500', connected: true },
+  { id: 'facebook', name: 'Facebook', icon: '👍', color: 'bg-indigo-600', connected: true },
+  { id: 'x', name: 'X (Twitter)', icon: '𝕏', color: 'bg-black', connected: true },
 ];
 
 export default function ConnectPage() {
